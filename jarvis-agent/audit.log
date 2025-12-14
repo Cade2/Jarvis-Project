@@ -41,3 +41,7 @@
 2025-12-14T14:02:23.187517 | close_application | {'app_name': 'notepad'} | success
 2025-12-14T14:02:37.622800 | close_application | {'app_name': 'Task Manager'} | success
 2025-12-14T14:03:03.314922 | list_reminders | {} | success
+2025-12-14T14:13:04.302186 | create_reminder | {'text': 'remind me to drink water at 9pm', 'when': '2025-12-14 21:00'} | success
+2025-12-14T14:13:12.335450 | create_reminder | {'text': 'remind me to submit my assignment on Monday', 'when': '2025-12-15'} | success
+2025-12-14T14:13:18.756124 | create_reminder | {'text': 'remind me to call mom tomorrow at 10:30am', 'when': '2025-12-15 10:30'} | success
+2025-12-14T14:13:23.769307 | list_reminders | {} | success

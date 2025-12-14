@@ -44,17 +44,17 @@ def create_reminder(params: Dict[str, Any]):
 
 def list_reminders(params: Dict[str, Any]):
     """
-    List all saved reminders from reminders.json.
+    Print all saved reminders in a numbered list.
     """
     reminders = _load_reminders()
     if not reminders:
-        print("[REMINDERS] No saved reminders.")
+        print("[REMINDERS] (none yet)")
         return
 
     print("[REMINDERS]")
     for idx, r in enumerate(reminders, start=1):
-        text = r.get("text", "")
-        when = r.get("when", "")
+        text = r.get("text", "(no text)")
+        when = r.get("when", "unspecified time")
         print(f"{idx}. {text} @ {when}")
 
 
