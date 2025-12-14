@@ -3,14 +3,22 @@ import subprocess
 import sys
 import json
 from pathlib import Path
+from .policy import Policy
+from .runner_manager import ensure_runner_started
+from .runner_client import RunnerClient
+
 
 from .safety import Tool, RiskLevel
+
+_runner = RunnerClient()
+_policy = Policy.load()
+
 
 # ---- Reminder storage helpers ----
 
 REMINDERS_FILE = Path("reminders.json")
 
-AUDIT_FILE = Path("audit.log")  # same file safety.log_action writes to
+from .safety import Tool, RiskLevel, get_audit_path
 
 def _load_reminders():
     if REMINDERS_FILE.exists():
@@ -107,26 +115,32 @@ def clear_reminders(params: Dict[str, Any]):
 
 def show_activity(params: Dict[str, Any]):
     """
-    Show the most recent actions from the local audit.log file.
+    Show the most recent actions from the current session audit log file.
     """
+    params = params or {}
     limit = int(params.get("limit", 10))
 
-    if not AUDIT_FILE.exists():
-        print("[ACTIVITY] No audit.log file found yet.")
+    audit_file = get_audit_path()
+
+    if not audit_file.exists():
+        print("[ACTIVITY] No audit file found for this session yet.")
         return
 
     try:
-        with open(AUDIT_FILE, "r", encoding="utf-8") as f:
+        with open(audit_file, "r", encoding="utf-8") as f:
             lines = f.readlines()
     except Exception as e:
-        print(f"[ACTIVITY] Failed to read audit.log: {e}")
+        print(f"[ACTIVITY] Failed to read audit file: {e}")
         return
+
+    # Optional: skip the header line starting with "#"
+    lines = [ln for ln in lines if not ln.strip().startswith("#")]
 
     if not lines:
-        print("[ACTIVITY] audit.log is empty.")
+        print("[ACTIVITY] Audit log is empty for this session.")
         return
 
-    print("[ACTIVITY] Recent actions:")
+    print(f"[ACTIVITY] Recent actions (from {audit_file.name}):")
     for idx, line in enumerate(lines[-limit:], start=1):
         print(f"{idx}. {line.strip()}")
 
@@ -134,94 +148,32 @@ def show_activity(params: Dict[str, Any]):
 
 def open_application(params: Dict[str, Any]):
     """
-    Try to open a desktop application by name.
-
-    On Windows, this uses the 'start' command with a small alias map
-    for common apps (Notepad, Chrome, Edge, etc.).
-    On macOS, it uses 'open -a'.
-    On Linux, it tries to run the app directly.
+    Backwards-compatible wrapper that calls the MK2 runner.
     """
     app_name = params.get("app_name")
     if not app_name:
         print("No app_name provided.")
-        return
+        return {"error": "No app_name provided"}
 
-    print(f"[OPEN APPLICATION] {app_name}")
-
-    try:
-        if sys.platform.startswith("win"):
-            app_name_lower = app_name.lower().strip()
-
-            # Common friendly-name -> command aliases
-            aliases = {
-                "notepad": "notepad",
-                "microsoft teams": "Teams",      # may work if Teams is on PATH
-                "teams": "Teams",
-                "google chrome": "chrome",
-                "chrome": "chrome",
-                "edge": "msedge",
-                "microsoft edge": "msedge",
-            }
-
-            target = aliases.get(app_name_lower, app_name)
-
-            # Use start "" "<target>" so Windows tries to resolve it
-            cmd = f'start "" "{target}"'
-            subprocess.Popen(cmd, shell=True)
-
-        elif sys.platform == "darwin":
-            # macOS: open by app name
-            subprocess.Popen(["open", "-a", app_name])
-
-        else:
-            # Linux / other: try to run directly
-            subprocess.Popen([app_name])
-
-    except Exception as e:
-        print(f"Failed to open application: {e}")
+    ensure_runner_started()
+    result = _runner.run_tool("apps.open", {"name": app_name})
+    print(f"[OPEN APPLICATION] {app_name} -> {result}")
+    return result
 
 
 def close_application(params: Dict[str, Any]):
     """
-    Try to close a desktop application by name.
-
-    v0: very conservative and simple.
-    - On Windows, we map common app names to process names and call taskkill.
-    - For other platforms, this is currently a no-op.
+    Backwards-compatible wrapper that calls the MK2 runner.
     """
     app_name = params.get("app_name")
     if not app_name:
         print("No app_name provided.")
-        return
+        return {"error": "No app_name provided"}
 
-    print(f"[CLOSE APPLICATION] {app_name}")
-
-    # Very simple mapping for now. We can extend this later.
-    app_name_lower = app_name.lower()
-
-    if sys.platform.startswith("win"):
-        # Map friendly names to process names
-        process_map = {
-            "notepad": "notepad.exe",
-        }
-        process_name = process_map.get(app_name_lower)
-
-        if not process_name:
-            print("Sorry, I don't know how to safely close that app yet.")
-            return
-
-        try:
-            # /F = force; /IM = by image name
-            subprocess.run(
-                ["taskkill", "/IM", process_name, "/F"],
-                check=False,
-                shell=True,
-            )
-        except Exception as e:
-            print(f"Failed to close application: {e}")
-    else:
-        print("Close application is not implemented for this OS yet.")
-
+    ensure_runner_started()
+    result = _runner.run_tool("apps.close", {"name": app_name})
+    print(f"[CLOSE APPLICATION] {app_name} -> {result}")
+    return result
 
 # ---- Tool registry ----
 
@@ -269,5 +221,55 @@ TOOLS: Dict[str, Tool] = {
         func=clear_reminders,
     ),
 }
+
+# ---- Runner-backed tools (MK2) ----
+from .runner_client import RunnerClient
+from .runner_manager import ensure_runner_started
+from .policy import Policy
+
+_policy = Policy.load()
+_runner = RunnerClient()
+
+def _runner_tool(tool_name: str):
+    def _call(params: Dict[str, Any]):
+        if not _policy.is_domain_allowed(tool_name):
+            return {"error": f"Policy blocks tool '{tool_name}' (domain not allowed)."}
+        ensure_runner_started()
+        return _runner.run_tool(tool_name, params)
+    return _call
+
+TOOLS.update({
+    "system.get_info": Tool(
+        name="system.get_info",
+        description="Read system info (OS, CPU, RAM, uptime).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("system.get_info"),
+    ),
+    "system.get_storage": Tool(
+        name="system.get_storage",
+        description="Read disk storage info (free/total).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("system.get_storage"),
+    ),
+    "apps.list_installed": Tool(
+        name="apps.list_installed",
+        description="List installed applications on this device.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("apps.list_installed"),
+    ),
+    "apps.open": Tool(
+        name="apps.open",
+        description="Open an application by name (best effort).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("apps.open"),
+    ),
+    "apps.close": Tool(
+        name="apps.close",
+        description="Force close an application by name (can lose work).",
+        risk=RiskLevel.HIGH,
+        func=_runner_tool("apps.close"),
+    ),
+})
+
 
 

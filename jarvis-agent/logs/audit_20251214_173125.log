@@ -1,0 +1,3 @@
+# Jarvis audit session started 2025-12-14T17:31:25.236489
+2025-12-14T17:33:20.882591 | system.get_info | {} | error: Runner failed to start. Try: python -m runner.server
+2025-12-14T17:33:46.804769 | system.get_info | {} | error: Runner failed to start. Try: python -m runner.server

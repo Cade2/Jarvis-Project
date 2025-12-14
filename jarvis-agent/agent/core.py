@@ -1,29 +1,43 @@
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import re
+from .policy import Policy
+
 
 from .tools import TOOLS
 from .safety import should_confirm, log_action, Tool
 from .models import ChatModel
 
 # Single shared chat model instance (local LLM)
+_policy = Policy.load()
 _chat_model = ChatModel()   # <-- this is our "brain"
 
 
 def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
-    """
-    Helper to run a tool with safety + logging.
-    """
     tool: Tool = TOOLS[tool_name]
 
     # Safety: confirmation if required
     if should_confirm(tool, params):
         print(f"Jarvis: I plan to use '{tool.name}' with parameters: {params}")
-        choice = input("Proceed? (y/n): ").strip().lower()
-        if choice not in ("y", "yes"):
-            print("Jarvis: Okay, I cancelled that action.")
-            log_action(tool, params, "cancelled")
-            return
+
+        cfg = _policy.confirm_config()
+        type_risks = set(cfg.get("type_to_confirm_for_risks", []) or [])
+        phrase_high = cfg.get("type_phrase_high", "CONFIRM")
+        phrase_critical = cfg.get("type_phrase_critical", "CONFIRM-CRITICAL")
+
+        if tool.risk.name in type_risks:
+            phrase = phrase_critical if tool.risk.name == "CRITICAL" else phrase_high
+            typed = input(f"Type '{phrase}' to proceed: ").strip()
+            if typed != phrase:
+                print("Jarvis: Okay, I cancelled that action.")
+                log_action(tool, params, "cancelled")
+                return
+        else:
+            choice = input("Proceed? (y/n): ").strip().lower()
+            if choice not in ("y", "yes"):
+                print("Jarvis: Okay, I cancelled that action.")
+                log_action(tool, params, "cancelled")
+                return
 
     # Execute the tool and log
     try:
@@ -34,6 +48,7 @@ def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
     except Exception as exc:
         print(f"Jarvis: Something went wrong while executing the tool: {exc}")
         log_action(tool, params, f"error: {exc}")
+
 
 
 def _extract_when_from_text(text: str) -> str:
@@ -121,6 +136,19 @@ def handle_user_message(user_message: str) -> None:
     text_lower = raw.strip().lower()
     normalized = " ".join(raw.split()).lower()
 
+    if normalized in ("system info", "my system", "pc info"):
+        _run_tool("system.get_info", {})
+        return
+
+    if normalized in ("storage", "disk space", "drive space"):
+        _run_tool("system.get_storage", {})
+        return
+
+    if normalized in ("list installed apps", "installed apps", "apps list"):
+        _run_tool("apps.list_installed", {})
+        return
+
+
     # 🔹 NEW: help / commands
     if normalized in ("help", "commands", "what can you do", "what can you do?"):
         print("Jarvis: Here’s what I can do right now:")
@@ -135,6 +163,20 @@ def handle_user_message(user_message: str) -> None:
         print("  • Activity log  → show activity")
         print("                    show activity last <N>")
         return
+    
+        # 🔹 MK2 quick commands (runner-backed tools)
+    if normalized in ("system info", "my system", "pc info"):
+        _run_tool("system.get_info", {})
+        return
+
+    if normalized in ("storage", "disk space", "drive space"):
+        _run_tool("system.get_storage", {})
+        return
+
+    if normalized in ("list installed apps", "installed apps", "apps list"):
+        _run_tool("apps.list_installed", {})
+        return
+
 
 
     # 0) Summarise text
@@ -193,12 +235,17 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("list_reminders", {})
         return
 
+    
+
     # 5) Show recent activity from audit.log
     if (
         normalized in ("show activity", "show audit log", "show log")
         or "audit.log" in text_lower
         or "activity log" in text_lower
     ):
+        
+      
+        
         # Allow optional "last N" style, e.g. "show activity last 5"
         limit = 10
         match = re.search(r"last\s+(\d+)", text_lower)

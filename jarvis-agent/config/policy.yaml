@@ -1,0 +1,26 @@
+version: 0.1
+
+allow_domains:
+  - system
+  - storage
+  - apps
+  - network
+  - display
+  - settings
+  - runner
+  - uia
+
+ui_automation:
+  enabled: false
+  allowlisted_apps:
+    - "Windows Settings"
+    - "Visual Studio Code"
+
+confirm:
+  # MEDIUM -> y/n, HIGH & CRITICAL -> type-to-confirm
+  y_n_for_risks: ["MEDIUM"]
+  type_to_confirm_for_risks: ["HIGH", "CRITICAL"]
+  type_phrase_high: "CONFIRM"
+  type_phrase_critical: "CONFIRM-CRITICAL"
+
+elevation_required_tools: []
