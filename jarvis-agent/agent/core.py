@@ -3,21 +3,22 @@ from typing import Dict, Any
 from .tools import TOOLS
 from .safety import should_confirm, log_action, Tool
 from .planner import build_planner_prompt, parse_planner_output
-from .models import DummyPlannerModel
+from .models import DummyPlannerModel, ChatModel
 
 
-# Toggle this to True later when we have a real model
+# Toggle this later when we have a real LLM planner wired up
 USE_MODEL_PLANNER = False
 
-# Single instance of the planner model (will be replaced with real LLM later)
+# Single shared instances
 _planner_model = DummyPlannerModel()
+_chat_model = ChatModel()   # <-- this is our chat brain
 
 
 def plan_action_rule_based(user_message: str) -> Dict[str, Any]:
     """
     v0 fallback planner using simple rules.
 
-    This is what we already had, just renamed.
+    This is the original logic we had before introducing the planner.
     """
     text = user_message.lower().strip()
 
@@ -57,12 +58,16 @@ def plan_action_with_model(user_message: str) -> Dict[str, Any]:
     plan = parse_planner_output(raw_output)
 
     # Ensure keys exist
-    if "tool_name" not in plan:
-        plan["tool_name"] = None
-    if "params" not in plan:
-        plan["params"] = {}
+    tool_name = plan.get("tool_name")
+    params = plan.get("params", {})
 
-    return plan
+    if tool_name == "none":
+        tool_name = None
+
+    if not isinstance(params, dict):
+        params = {}
+
+    return {"tool_name": tool_name, "params": params}
 
 
 def plan_action(user_message: str) -> Dict[str, Any]:
@@ -70,17 +75,14 @@ def plan_action(user_message: str) -> Dict[str, Any]:
     Wrapper that decides whether to use the model-based planner
     or the simple rule-based planner.
 
-    For now, we keep USE_MODEL_PLANNER = False so behavior is exactly
-    the same as before. Later, when we plug in a real local LLM,
-    we can switch this flag.
+    For now, USE_MODEL_PLANNER = False so behavior stays the same
+    as the original rule-based logic until we switch it on.
     """
     if USE_MODEL_PLANNER:
         plan = plan_action_with_model(user_message)
-        # If the model couldn't decide, fall back to rules
         if plan.get("tool_name"):
             return plan
 
-    # Default: rule-based
     return plan_action_rule_based(user_message)
 
 
@@ -89,18 +91,24 @@ def handle_user_message(user_message: str) -> None:
     Main entrypoint for a single user message.
 
     - Plans an action (tool + params)
-    - Applies safety checks (confirmation if needed)
-    - Executes the tool
-    - Logs the result
+    - If a tool is chosen: apply safety checks, execute, and log.
+    - If no tool is chosen: fall back to the chat model.
     """
     plan = plan_action(user_message)
     tool_name = plan["tool_name"]
     params = plan["params"]
 
+    # 🔹 NO TOOL → use chat model instead of just "noted your message"
     if not tool_name:
-        print("Jarvis: I’m not sure what action to take yet, but I noted your message.")
+        print("Jarvis: (thinking)...")
+        reply = _chat_model.chat([
+            f"User: {user_message}",
+            "Assistant:"
+        ])
+        print(f"Jarvis: {reply}")
         return
 
+    # 🔹 TOOL PATH (same as before)
     tool: Tool = TOOLS[tool_name]
 
     # Safety: confirmation if required
