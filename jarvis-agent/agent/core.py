@@ -177,6 +177,20 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("apps.list_installed", {})
         return
 
+        # Open Windows Settings deep links
+    if text_lower.startswith("open settings "):
+        target = raw.strip()[len("open settings "):].strip()
+        if not target:
+            target = "system"
+        _run_tool("settings.open", {"target": target})
+        return
+
+    if normalized.startswith("settings "):
+        target = raw.strip()[len("settings "):].strip()
+        if not target:
+            target = "system"
+        _run_tool("settings.open", {"target": target})
+        return
 
 
     # 0) Summarise text

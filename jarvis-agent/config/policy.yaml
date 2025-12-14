@@ -10,6 +10,14 @@ allow_domains:
   - runner
   - uia
 
+allowed_domains:
+  - system.get_info
+  - system.get_storage
+  - apps.list_installed
+  - apps.open
+  - apps.close
+  - settings.open
+
 ui_automation:
   enabled: false
   allowlisted_apps:

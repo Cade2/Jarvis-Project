@@ -269,6 +269,12 @@ TOOLS.update({
         risk=RiskLevel.HIGH,
         func=_runner_tool("apps.close"),
     ),
+    "settings.open": Tool(
+    name="settings.open",
+    description="Open a Windows Settings page (ms-settings deep link).",
+    risk=RiskLevel.LOW,
+    func=_runner_tool("settings.open"),
+),
 })
 
 
