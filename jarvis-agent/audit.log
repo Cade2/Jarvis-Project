@@ -45,3 +45,10 @@
 2025-12-14T14:13:12.335450 | create_reminder | {'text': 'remind me to submit my assignment on Monday', 'when': '2025-12-15'} | success
 2025-12-14T14:13:18.756124 | create_reminder | {'text': 'remind me to call mom tomorrow at 10:30am', 'when': '2025-12-15 10:30'} | success
 2025-12-14T14:13:23.769307 | list_reminders | {} | success
+2025-12-14T14:23:18.525932 | show_activity | {'limit': 10} | success
+2025-12-14T14:30:40.472599 | show_activity | {'limit': 10} | success
+2025-12-14T14:36:31.633532 | list_reminders | {} | success
+2025-12-14T14:36:42.581505 | delete_reminder | {'index': 2} | success
+2025-12-14T14:37:01.838642 | list_reminders | {} | success
+2025-12-14T14:37:20.056980 | clear_reminders | {} | success
+2025-12-14T14:37:27.073629 | list_reminders | {} | success

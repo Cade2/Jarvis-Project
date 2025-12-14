@@ -70,7 +70,7 @@ class ChatModel:
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def chat(self, messages: List[str], max_new_tokens: int = 96) -> str:
+    def chat(self, messages: List[str], max_new_tokens: int = 72) -> str:
         """
         Very simple chat interface.
 
@@ -98,7 +98,7 @@ class ChatModel:
                 max_new_tokens=max_new_tokens,
                 do_sample=True,
                 top_p=0.9,
-                temperature=0.7,
+                temperature=0.6,          # slightly more focused
                 repetition_penalty=1.1,
                 pad_token_id=self.tokenizer.eos_token_id,
             )

@@ -177,7 +177,43 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("list_reminders", {})
         return
 
-    # 5) No matching command → general chat
+    # 5) Show recent activity from audit.log
+    if (
+        normalized in ("show activity", "show audit log", "show log")
+        or "audit.log" in text_lower
+        or "activity log" in text_lower
+    ):
+        # Allow optional "last N" style, e.g. "show activity last 5"
+        limit = 10
+        match = re.search(r"last\s+(\d+)", text_lower)
+        if match:
+            try:
+                limit = int(match.group(1))
+            except ValueError:
+                limit = 10
+
+        _run_tool("show_activity", {"limit": limit})
+        return
+
+    # 6) Delete a single reminder: "delete reminder 2", "remove reminder 3", etc.
+    if text_lower.startswith("delete reminder") or text_lower.startswith("remove reminder"):
+        # Find the first integer in the message
+        match = re.search(r"(\d+)", text_lower)
+        if not match:
+            print("Jarvis: Please tell me which reminder number to delete (e.g. 'delete reminder 2').")
+            return
+
+        index = int(match.group(1))
+        _run_tool("delete_reminder", {"index": index})
+        return
+
+    # 7) Clear all reminders
+    if normalized in ("clear reminders", "delete all reminders", "remove all reminders"):
+        _run_tool("clear_reminders", {})
+        return
+
+
+    # 8) No matching command → general chat
     print("Jarvis: (thinking)...")
     reply = _chat_model.chat([
         "You are a helpful, concise assistant named Jarvis.",
