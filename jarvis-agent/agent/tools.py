@@ -274,7 +274,26 @@ TOOLS.update({
     description="Open a Windows Settings page (ms-settings deep link).",
     risk=RiskLevel.LOW,
     func=_runner_tool("settings.open"),
+    ),
+    "network.get_state": Tool(
+    name="network.get_state",
+    description="Read network state (Wi-Fi adapter + connection info).",
+    risk=RiskLevel.READ_ONLY,
+    func=_runner_tool("network.get_state"),
 ),
+"network.toggle_wifi": Tool(
+    name="network.toggle_wifi",
+    description="Enable/disable Wi-Fi (verified before/after).",
+    risk=RiskLevel.MEDIUM,
+    func=_runner_tool("network.toggle_wifi"),
+),
+"network.toggle_airplane_mode": Tool(
+    name="network.toggle_airplane_mode",
+    description="Airplane Mode (currently opens settings; direct toggle later).",
+    risk=RiskLevel.MEDIUM,
+    func=_runner_tool("network.toggle_airplane_mode"),
+),
+
 })
 
 

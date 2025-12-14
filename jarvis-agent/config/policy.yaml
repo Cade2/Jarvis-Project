@@ -17,6 +17,10 @@ allowed_domains:
   - apps.open
   - apps.close
   - settings.open
+  - network.get_state
+  - network.toggle_wifi
+  - network.toggle_airplane_mode
+
 
 ui_automation:
   enabled: false

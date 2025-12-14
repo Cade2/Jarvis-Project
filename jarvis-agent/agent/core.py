@@ -192,6 +192,35 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("settings.open", {"target": target})
         return
 
+        # Network status
+    if normalized in ("network status", "network state", "wifi status", "wifi state"):
+        _run_tool("network.get_state", {})
+        return
+
+    # Wi-Fi toggle
+    if normalized in ("wifi on", "turn wifi on", "enable wifi"):
+        _run_tool("network.toggle_wifi", {"enabled": True})
+        return
+
+    if normalized in ("wifi off", "turn wifi off", "disable wifi"):
+        _run_tool("network.toggle_wifi", {"enabled": False})
+        return
+
+    # Airplane mode (currently opens settings)
+    if normalized in ("airplane mode", "open airplane mode"):
+        _run_tool("settings.open", {"target": "airplane mode"})
+        return
+
+    if normalized in ("airplane mode on", "turn airplane mode on"):
+        _run_tool("network.toggle_airplane_mode", {"enabled": True})
+        _run_tool("settings.open", {"target": "airplane mode"})
+        return
+
+    if normalized in ("airplane mode off", "turn airplane mode off"):
+        _run_tool("network.toggle_airplane_mode", {"enabled": False})
+        _run_tool("settings.open", {"target": "airplane mode"})
+        return
+
 
     # 0) Summarise text
     if text_lower.startswith("summarise:") or text_lower.startswith("summarize:"):
