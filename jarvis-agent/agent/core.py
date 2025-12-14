@@ -162,6 +162,10 @@ def handle_user_message(user_message: str) -> None:
         print("                    close <app name>")
         print("  • Activity log  → show activity")
         print("                    show activity last <N>")
+        print("  • Display       → brightness <0-100>")
+        print("                    brightness up / brightness down")
+        print("                    display state")
+
         return
     
         # 🔹 MK2 quick commands (runner-backed tools)
@@ -219,6 +223,38 @@ def handle_user_message(user_message: str) -> None:
     if normalized in ("airplane mode off", "turn airplane mode off"):
         _run_tool("network.toggle_airplane_mode", {"enabled": False})
         _run_tool("settings.open", {"target": "airplane mode"})
+        return
+
+
+        # Display state
+    if normalized in ("display state", "display status", "brightness", "brightness status"):
+        _run_tool("display.get_state", {})
+        return
+
+    # Brightness set: "brightness 30" or "set brightness 30"
+    match = re.search(r"(?:set\s+brightness|brightness)\s+(\d{1,3})", text_lower)
+    if match:
+        level = int(match.group(1))
+        _run_tool("display.set_brightness", {"level": level})
+        return
+
+    # Brightness up/down (uses current state)
+    if normalized in ("brightness up", "increase brightness"):
+        state = TOOLS["display.get_state"].func({})
+        cur = (state.get("result") or {}).get("brightness")
+        if cur is None:
+            _run_tool("settings.open", {"target": "display"})
+            return
+        _run_tool("display.set_brightness", {"level": min(100, int(cur) + 10)})
+        return
+
+    if normalized in ("brightness down", "decrease brightness"):
+        state = TOOLS["display.get_state"].func({})
+        cur = (state.get("result") or {}).get("brightness")
+        if cur is None:
+            _run_tool("settings.open", {"target": "display"})
+            return
+        _run_tool("display.set_brightness", {"level": max(0, int(cur) - 10)})
         return
 
 

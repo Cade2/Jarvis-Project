@@ -280,19 +280,32 @@ TOOLS.update({
     description="Read network state (Wi-Fi adapter + connection info).",
     risk=RiskLevel.READ_ONLY,
     func=_runner_tool("network.get_state"),
-),
-"network.toggle_wifi": Tool(
-    name="network.toggle_wifi",
-    description="Enable/disable Wi-Fi (verified before/after).",
-    risk=RiskLevel.MEDIUM,
-    func=_runner_tool("network.toggle_wifi"),
-),
-"network.toggle_airplane_mode": Tool(
-    name="network.toggle_airplane_mode",
-    description="Airplane Mode (currently opens settings; direct toggle later).",
-    risk=RiskLevel.MEDIUM,
-    func=_runner_tool("network.toggle_airplane_mode"),
-),
+    ),
+    "network.toggle_wifi": Tool(
+        name="network.toggle_wifi",
+        description="Enable/disable Wi-Fi (verified before/after).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("network.toggle_wifi"),
+    ),
+    "network.toggle_airplane_mode": Tool(
+        name="network.toggle_airplane_mode",
+        description="Airplane Mode (currently opens settings; direct toggle later).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("network.toggle_airplane_mode"),
+    ),
+    "display.get_state": Tool(
+        name="display.get_state",
+        description="Read display brightness state (best effort).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("display.get_state"),
+    ),
+    "display.set_brightness": Tool(
+        name="display.set_brightness",
+        description="Set screen brightness (0-100) with verification.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("display.set_brightness"),
+    ),
+
 
 })
 

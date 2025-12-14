@@ -7,6 +7,8 @@ from .tools_settings import settings_open
 from .tools_system import system_get_info, system_get_storage
 from .tools_apps import apps_list_installed, apps_open, apps_close
 from .tools_network import network_get_state, network_toggle_wifi, network_toggle_airplane_mode
+from .tools_display import display_get_state, display_set_brightness
+
 
 
 TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
@@ -20,6 +22,10 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "network.get_state": network_get_state,
     "network.toggle_wifi": network_toggle_wifi,
     "network.toggle_airplane_mode": network_toggle_airplane_mode,
+
+    "display.get_state": display_get_state,
+    "display.set_brightness": display_set_brightness,
+
 }
 
 
