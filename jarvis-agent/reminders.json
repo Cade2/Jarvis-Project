@@ -6,5 +6,13 @@
   {
     "text": "remind me to drink water at 9pm",
     "when": "tomorrow 18:00"
+  },
+  {
+    "text": "remind me to drink water at 9pm",
+    "when": "tomorrow 18:00"
+  },
+  {
+    "text": "remind me to submit my assignment on Monday",
+    "when": "tomorrow 18:00"
   }
 ]

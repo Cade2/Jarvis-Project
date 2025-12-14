@@ -38,11 +38,12 @@ def handle_user_message(user_message: str) -> None:
     """
     Main entrypoint for a single user message.
 
-    v0 routing (MK1.5):
+    v0 routing (MK1.6):
     - If the message starts with:
-        * "remind me"   -> create_reminder tool
-        * "open "       -> open_application tool
-        * "close "      -> close_application tool
+        * "summarise:" / "summarize:" -> summarise the following text
+        * "remind me"                 -> create_reminder tool
+        * "open "                     -> open_application tool
+        * "close "                    -> close_application tool
       or exactly matches:
         * "list reminders" / "show reminders" / "show my reminders"
       then we run the corresponding tool with safety + logging.
@@ -51,6 +52,24 @@ def handle_user_message(user_message: str) -> None:
 
     raw = user_message
     text_lower = raw.strip().lower()
+
+    # 0) Summarise text
+    if text_lower.startswith("summarise:") or text_lower.startswith("summarize:"):
+        parts = raw.split(":", 1)
+        if len(parts) < 2 or not parts[1].strip():
+            print("Jarvis: You asked me to summarise, but didn't give any text.")
+            return
+
+        content = parts[1].strip()
+        print("Jarvis: (summarising)...")
+
+        reply = _chat_model.chat([
+            "Summarise this text clearly and concisely:",
+            content,
+            "Summary:",
+        ])
+        print(f"Jarvis: {reply}")
+        return
 
     # 1) Reminders
     if text_lower.startswith("remind me"):
@@ -89,7 +108,7 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("list_reminders", {})
         return
 
-    # 5) No matching tool → general chat
+    # 5) No matching command → general chat
     print("Jarvis: (thinking)...")
     reply = _chat_model.chat([
         f"User: {user_message}",
