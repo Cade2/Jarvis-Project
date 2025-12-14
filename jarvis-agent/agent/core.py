@@ -98,7 +98,7 @@ def handle_user_message(user_message: str) -> None:
     """
     Main entrypoint for a single user message.
 
-    v0 routing (MK1.7):
+    v0 routing (MK1.6):
 
     - If the message starts with:
         * "summarise:" / "summarize:" -> summarise the following text
@@ -107,19 +107,35 @@ def handle_user_message(user_message: str) -> None:
         * "close "                    -> close_application tool
       or (after normalising spaces) exactly matches:
         * "list reminders" / "show reminders" / "show my reminders"
+        * "show activity" / "show activity last N"
       then we run the corresponding tool with safety + logging.
     - Otherwise, we fall back to the local chat model.
     """
 
     raw = user_message
 
-    # Ignore empty / whitespace-only input
     if not raw.strip():
         print("Jarvis: I didn't receive any input.")
         return
 
     text_lower = raw.strip().lower()
-    normalized = " ".join(raw.split()).lower()  # collapse multiple spaces
+    normalized = " ".join(raw.split()).lower()
+
+    # 🔹 NEW: help / commands
+    if normalized in ("help", "commands", "what can you do", "what can you do?"):
+        print("Jarvis: Here’s what I can do right now:")
+        print("  • General chat  → just type anything")
+        print("  • Summaries     → summarise: <text>")
+        print("  • Reminders     → remind me to <do X> at <time>")
+        print("                    list reminders")
+        print("                    delete reminder <number>")
+        print("                    clear reminders   (with confirmation)")
+        print("  • Apps          → open <app name>")
+        print("                    close <app name>")
+        print("  • Activity log  → show activity")
+        print("                    show activity last <N>")
+        return
+
 
     # 0) Summarise text
     if text_lower.startswith("summarise:") or text_lower.startswith("summarize:"):
