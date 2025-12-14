@@ -1,7 +1,8 @@
 from typing import List
+import json
+
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
-import json
 
 
 class DummyPlannerModel:
@@ -69,24 +70,31 @@ class ChatModel:
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def chat(self, messages: List[str], max_new_tokens: int = 160) -> str:
+    def chat(self, messages: List[str], max_new_tokens: int = 96) -> str:
         """
         Very simple chat interface.
 
-        messages: ["User: ...", "Assistant:", ...]
+        Args:
+            messages: List of chat turns (e.g. ["User: ...", "Assistant:", ...]).
+            max_new_tokens: Maximum number of new tokens to generate.
         """
         prompt = "\n".join(messages)
 
-        # Phi-2 docs recommend return_attention_mask=False for simplicity
-        inputs = self.tokenizer(
+        # Tokenise without relying on pad/attention_mask tricks
+        enc = self.tokenizer(
             prompt,
             return_tensors="pt",
-            return_attention_mask=False,
-        ).to(self.device)
+            padding=False,
+        )
+        input_ids = enc["input_ids"].to(self.device)
+
+        # Explicit attention mask = all ones (no padding)
+        attention_mask = torch.ones_like(input_ids)
 
         with torch.no_grad():
             outputs = self.model.generate(
-                **inputs,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
                 max_new_tokens=max_new_tokens,
                 do_sample=True,
                 top_p=0.9,
@@ -96,6 +104,5 @@ class ChatModel:
             )
 
         full = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-
         # Return only the new text after the prompt
         return full[len(prompt):].strip()
