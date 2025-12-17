@@ -1,22 +1,62 @@
+# agent/core.py
 from typing import Dict, Any
 from datetime import datetime, timedelta
 import re
+
 from .policy import Policy
-
-
 from .tools import TOOLS
 from .safety import should_confirm, log_action, Tool
 from .models import ChatModel
 
-# Single shared chat model instance (local LLM)
 _policy = Policy.load()
-_chat_model = ChatModel()   # <-- this is our "brain"
+_chat_model = ChatModel()   # local LLM "brain"
+
+
+# -------------------------
+# Normalization + Aliases
+# -------------------------
+def _normalize(text: str) -> str:
+    text = (text or "").strip().lower()
+    # remove common punctuation that breaks exact matches
+    text = re.sub(r"[?!.,;:]+$", "", text)
+    # collapse whitespace
+    return " ".join(text.split())
+
+
+ALIASES = {
+    # runner
+    "runner elevated": "runner is elevated",
+    "runner admin": "runner is elevated",
+    "runner status": "runner is elevated",
+    "runner elevated?": "runner is elevated",
+    "is runner elevated": "runner is elevated",
+    "is runner elevated?": "runner is elevated",
+
+    # wifi
+    "wifi enable": "wifi on",
+    "enable wifi": "wifi on",
+    "turn on wifi": "wifi on",
+    "wifi disable": "wifi off",
+    "disable wifi": "wifi off",
+    "turn off wifi": "wifi off",
+
+    # settings
+    "settings wifi": "open settings wifi",
+    "settings bluetooth": "open settings bluetooth",
+    "settings display": "open settings display",
+    "settings update": "open settings windows update",
+    "windows update": "open settings windows update",
+
+    # bluetooth
+    "paired devices": "list paired devices",
+    "bluetooth paired devices": "list paired devices",
+    "list bluetooth devices": "list paired devices",
+}
 
 
 def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
     tool: Tool = TOOLS[tool_name]
 
-    # Safety: confirmation if required
     if should_confirm(tool, params):
         print(f"Jarvis: I plan to use '{tool.name}' with parameters: {params}")
 
@@ -39,7 +79,6 @@ def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
                 log_action(tool, params, "cancelled")
                 return
 
-    # Execute the tool and log
     try:
         result = tool.func(params)
         log_action(tool, params, "success")
@@ -50,25 +89,10 @@ def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
         log_action(tool, params, f"error: {exc}")
 
 
-
 def _extract_when_from_text(text: str) -> str:
-    """
-    Very small, safe 'natural language' time parser for reminders.
-
-    It understands things like:
-      - "at 9pm" / "at 21:00" / "at 9:30 am"
-      - "tomorrow"
-      - "on Monday", "on tuesday", etc.
-
-    It returns a simple string like:
-      - "2025-12-15 21:00"
-      - "2025-12-16"
-    or "unspecified time" if we cannot figure it out.
-    """
     lower = text.lower()
     now = datetime.now()
 
-    # 1) Look for "at <time>" patterns
     m = re.search(r"at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", lower)
     if m:
         hour = int(m.group(1))
@@ -81,94 +105,56 @@ def _extract_when_from_text(text: str) -> str:
             if ampm == "am" and hour == 12:
                 hour = 0
 
-        # If "tomorrow" appears, schedule for tomorrow; otherwise today
-        day = now
-        if "tomorrow" in lower:
-            day = day + timedelta(days=1)
-
+        day = now + timedelta(days=1) if "tomorrow" in lower else now
         dt = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
         return dt.strftime("%Y-%m-%d %H:%M")
 
-    # 2) Plain "tomorrow" without a time
     if "tomorrow" in lower:
         return (now + timedelta(days=1)).strftime("%Y-%m-%d")
 
-    # 3) Day-of-week like "on monday"
-    weekdays = ["monday", "tuesday", "wednesday",
-                "thursday", "friday", "saturday", "sunday"]
-
+    weekdays = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
     for idx, name in enumerate(weekdays):
         if f"on {name}" in lower or lower.strip().startswith(name):
             days_ahead = (idx - now.weekday() + 7) % 7
             if days_ahead == 0:
-                days_ahead = 7  # next occurrence of that weekday
+                days_ahead = 7
             target = now + timedelta(days=days_ahead)
             return target.strftime("%Y-%m-%d")
 
-    # 4) Fallback
     return "unspecified time"
 
 
 def handle_user_message(user_message: str) -> None:
-    """
-    Main entrypoint for a single user message.
-
-    v0 routing (MK1.6):
-
-    - If the message starts with:
-        * "summarise:" / "summarize:" -> summarise the following text
-        * "remind me"                 -> create_reminder tool
-        * "open "                     -> open_application tool
-        * "close "                    -> close_application tool
-      or (after normalising spaces) exactly matches:
-        * "list reminders" / "show reminders" / "show my reminders"
-        * "show activity" / "show activity last N"
-      then we run the corresponding tool with safety + logging.
-    - Otherwise, we fall back to the local chat model.
-    """
-
-    raw = user_message
-
+    raw = user_message or ""
     if not raw.strip():
         print("Jarvis: I didn't receive any input.")
         return
 
     text_lower = raw.strip().lower()
-    normalized = " ".join(raw.split()).lower()
+    normalized = _normalize(raw)
 
-    if normalized in ("system info", "my system", "pc info"):
-        _run_tool("system.get_info", {})
-        return
+    # Apply alias rewrite
+    normalized = ALIASES.get(normalized, normalized)
 
-    if normalized in ("storage", "disk space", "drive space"):
-        _run_tool("system.get_storage", {})
-        return
-
-    if normalized in ("list installed apps", "installed apps", "apps list"):
-        _run_tool("apps.list_installed", {})
-        return
-
-
-    # 🔹 NEW: help / commands
+    # -------------------------
+    # HELP
+    # -------------------------
     if normalized in ("help", "commands", "what can you do", "what can you do?"):
         print("Jarvis: Here’s what I can do right now:")
-        print("  • General chat  → just type anything")
-        print("  • Summaries     → summarise: <text>")
-        print("  • Reminders     → remind me to <do X> at <time>")
-        print("                    list reminders")
-        print("                    delete reminder <number>")
-        print("                    clear reminders   (with confirmation)")
-        print("  • Apps          → open <app name>")
-        print("                    close <app name>")
-        print("  • Activity log  → show activity")
-        print("                    show activity last <N>")
-        print("  • Display       → brightness <0-100>")
-        print("                    brightness up / brightness down")
-        print("                    display state")
-
+        print("  • System        → system info | storage | installed apps")
+        print("  • Apps          → open <app> | close <app>")
+        print("  • Settings      → open settings <topic> | settings <topic>")
+        print("  • Network       → network status | wifi on | wifi off | airplane mode")
+        print("  • Display       → display state | brightness <0-100> | brightness up/down")
+        print("  • Runner        → runner is elevated | elevate runner")
+        print("  • Bluetooth     → bluetooth status | bluetooth on/off | list paired devices")
+        print("  • Reminders     → remind me to <x> at <time> | list reminders | delete reminder <n>")
+        print("  • Activity log  → show activity | show activity last <N>")
         return
-    
-        # 🔹 MK2 quick commands (runner-backed tools)
+
+    # -------------------------
+    # MK2 quick commands
+    # -------------------------
     if normalized in ("system info", "my system", "pc info"):
         _run_tool("system.get_info", {})
         return
@@ -181,27 +167,22 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("apps.list_installed", {})
         return
 
-        # Open Windows Settings deep links
+    # Settings
     if text_lower.startswith("open settings "):
         target = raw.strip()[len("open settings "):].strip()
-        if not target:
-            target = "system"
-        _run_tool("settings.open", {"target": target})
+        _run_tool("settings.open", {"target": target or "system"})
         return
 
     if normalized.startswith("settings "):
         target = raw.strip()[len("settings "):].strip()
-        if not target:
-            target = "system"
-        _run_tool("settings.open", {"target": target})
+        _run_tool("settings.open", {"target": target or "system"})
         return
 
-        # Network status
+    # Network
     if normalized in ("network status", "network state", "wifi status", "wifi state"):
         _run_tool("network.get_state", {})
         return
 
-    # Wi-Fi toggle
     if normalized in ("wifi on", "turn wifi on", "enable wifi"):
         _run_tool("network.toggle_wifi", {"enabled": True})
         return
@@ -210,7 +191,6 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("network.toggle_wifi", {"enabled": False})
         return
 
-    # Airplane mode (currently opens settings)
     if normalized in ("airplane mode", "open airplane mode"):
         _run_tool("settings.open", {"target": "airplane mode"})
         return
@@ -225,7 +205,8 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("settings.open", {"target": "airplane mode"})
         return
 
-    if normalized in ("runner elevated?", "runner is elevated", "runner admin", "runner status"):
+    # Runner elevation
+    if normalized in ("runner is elevated", "runner elevated?", "runner admin", "runner status"):
         _run_tool("runner.is_elevated", {})
         return
 
@@ -233,19 +214,16 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("runner.relaunch_elevated", {})
         return
 
-        # Display state
-    if normalized in ("display state", "display status", "brightness", "brightness status"):
+    # Display
+    if normalized in ("display state", "display status", "brightness status"):
         _run_tool("display.get_state", {})
         return
 
-    # Brightness set: "brightness 30" or "set brightness 30"
     match = re.search(r"(?:set\s+brightness|brightness)\s+(\d{1,3})", text_lower)
     if match:
-        level = int(match.group(1))
-        _run_tool("display.set_brightness", {"level": level})
+        _run_tool("display.set_brightness", {"level": int(match.group(1))})
         return
 
-    # Brightness up/down (uses current state)
     if normalized in ("brightness up", "increase brightness"):
         state = TOOLS["display.get_state"].func({})
         cur = (state.get("result") or {}).get("brightness")
@@ -264,12 +242,11 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("display.set_brightness", {"level": max(0, int(cur) - 10)})
         return
 
-    # Bluetooth status
+    # Bluetooth
     if normalized in ("bluetooth status", "bluetooth state", "bt status", "bt state"):
         _run_tool("bluetooth.get_state", {})
         return
 
-    # Bluetooth on/off
     if normalized in ("bluetooth on", "turn bluetooth on", "enable bluetooth"):
         _run_tool("bluetooth.toggle", {"enabled": True})
         return
@@ -278,30 +255,21 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("bluetooth.toggle", {"enabled": False})
         return
 
-        # List paired bluetooth devices
-    if normalized in ("list paired devices", "paired devices", "bluetooth paired", "list bluetooth"):
+    if normalized in ("list paired devices", "bluetooth paired", "list bluetooth"):
         _run_tool("bluetooth.list_paired", {})
         return
-    # Connect paired device (v0)
-    # examples:
-    #   "connect bluetooth AirPods"
-    #   "bluetooth connect AirPods"
+
     if normalized.startswith("connect bluetooth ") or normalized.startswith("bluetooth connect "):
-        name = raw.split(" ", 2)[2].strip()  # everything after first two words
+        name = raw.split(" ", 2)[2].strip()
         if not name:
             print("Jarvis: Please provide the device name, e.g. 'connect bluetooth AirPods'.")
             return
         _run_tool("bluetooth.connect_paired", {"name": name})
         return
 
-
-
-
-
-
-
-
-    # 0) Summarise text
+    # -------------------------
+    # MK1 commands
+    # -------------------------
     if text_lower.startswith("summarise:") or text_lower.startswith("summarize:"):
         parts = raw.split(":", 1)
         if len(parts) < 2 or not parts[1].strip():
@@ -310,7 +278,6 @@ def handle_user_message(user_message: str) -> None:
 
         content = parts[1].strip()
         print("Jarvis: (summarising)...")
-
         reply = _chat_model.chat([
             "You are a helpful, concise assistant.",
             "Summarise this text clearly and briefly:",
@@ -320,85 +287,97 @@ def handle_user_message(user_message: str) -> None:
         print(f"Jarvis: {reply}")
         return
 
-    # 1) Reminders
     if text_lower.startswith("remind me"):
         when_str = _extract_when_from_text(raw)
-        params = {
-            "text": raw,
-            "when": when_str,
-        }
-        _run_tool("create_reminder", params)
+        _run_tool("create_reminder", {"text": raw, "when": when_str})
         return
 
-    # 2) Open application
     if text_lower.startswith("open "):
         app_name = raw.strip()[len("open "):].strip()
         if not app_name:
             print("Jarvis: You asked me to open something, but I don't know which app.")
             return
-
-        params = {"app_name": app_name}
-        _run_tool("open_application", params)
+        _run_tool("open_application", {"app_name": app_name})
         return
 
-    # 3) Close application (HIGH risk)
     if text_lower.startswith("close "):
         app_name = raw.strip()[len("close "):].strip()
         if not app_name:
             print("Jarvis: You asked me to close something, but I don't know which app.")
             return
-
-        params = {"app_name": app_name}
-        _run_tool("close_application", params)
+        _run_tool("close_application", {"app_name": app_name})
         return
 
-    # 4) List reminders (space-insensitive)
     if normalized in ("list reminders", "show reminders", "show my reminders"):
         _run_tool("list_reminders", {})
         return
 
-    
-
-    # 5) Show recent activity from audit.log
-    if (
-        normalized in ("show activity", "show audit log", "show log")
-        or "audit.log" in text_lower
-        or "activity log" in text_lower
-    ):
-        
-      
-        
-        # Allow optional "last N" style, e.g. "show activity last 5"
+    if normalized in ("show activity", "show audit log", "show log") or "activity log" in text_lower:
         limit = 10
-        match = re.search(r"last\s+(\d+)", text_lower)
-        if match:
+        m = re.search(r"last\s+(\d+)", text_lower)
+        if m:
             try:
-                limit = int(match.group(1))
+                limit = int(m.group(1))
             except ValueError:
                 limit = 10
-
         _run_tool("show_activity", {"limit": limit})
         return
 
-    # 6) Delete a single reminder: "delete reminder 2", "remove reminder 3", etc.
     if text_lower.startswith("delete reminder") or text_lower.startswith("remove reminder"):
-        # Find the first integer in the message
-        match = re.search(r"(\d+)", text_lower)
-        if not match:
+        m = re.search(r"(\d+)", text_lower)
+        if not m:
             print("Jarvis: Please tell me which reminder number to delete (e.g. 'delete reminder 2').")
             return
-
-        index = int(match.group(1))
-        _run_tool("delete_reminder", {"index": index})
+        _run_tool("delete_reminder", {"index": int(m.group(1))})
         return
 
-    # 7) Clear all reminders
     if normalized in ("clear reminders", "delete all reminders", "remove all reminders"):
         _run_tool("clear_reminders", {})
         return
 
+        # Audio state
+    if normalized in ("audio status", "audio state", "volume status", "sound status"):
+        _run_tool("audio.get_state", {})
+        return
 
-    # 8) No matching command → general chat
+    # Set volume: "volume 30" or "set volume 30"
+    m = re.search(r"(?:set\s+volume|volume)\s+(\d{1,3})", text_lower)
+    if m:
+        level = int(m.group(1))
+        _run_tool("audio.set_volume", {"level": level})
+        return
+
+    # Volume up/down
+    if normalized in ("volume up", "increase volume", "sound up"):
+        state = TOOLS["audio.get_state"].func({}).get("result", {})
+        cur = state.get("volume")
+        if cur is None:
+            _run_tool("settings.open", {"target": "sound"})
+            return
+        _run_tool("audio.set_volume", {"level": min(100, int(cur) + 10)})
+        return
+
+    if normalized in ("volume down", "decrease volume", "sound down"):
+        state = TOOLS["audio.get_state"].func({}).get("result", {})
+        cur = state.get("volume")
+        if cur is None:
+            _run_tool("settings.open", {"target": "sound"})
+            return
+        _run_tool("audio.set_volume", {"level": max(0, int(cur) - 10)})
+        return
+
+    # Mute/unmute
+    if normalized in ("mute", "sound mute", "audio mute"):
+        _run_tool("audio.set_mute", {"muted": True})
+        return
+
+    if normalized in ("unmute", "sound unmute", "audio unmute"):
+        _run_tool("audio.set_mute", {"muted": False})
+        return
+
+    # -------------------------
+    # fallback chat
+    # -------------------------
     print("Jarvis: (thinking)...")
     reply = _chat_model.chat([
         "You are a helpful, concise assistant named Jarvis.",

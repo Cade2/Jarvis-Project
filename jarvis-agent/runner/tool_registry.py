@@ -10,6 +10,10 @@ from .tools_network import network_get_state, network_toggle_wifi, network_toggl
 from .tools_display import display_get_state, display_set_brightness
 from .tools_runner import runner_is_elevated
 from .tools_bluetooth import bluetooth_get_state, bluetooth_toggle, bluetooth_list_paired, bluetooth_connect_paired
+from .tools_uia import uia_get_status
+from .tools_audio import audio_get_state, audio_set_volume, audio_set_mute
+
+
 
 
 
@@ -37,7 +41,15 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "bluetooth.toggle": bluetooth_toggle,
     "bluetooth.list_paired": bluetooth_list_paired,
     "bluetooth.connect_paired": bluetooth_connect_paired,
-    
+
+    "uia.get_status": uia_get_status,
+
+    "audio.get_state": audio_get_state,
+    "audio.set_volume": audio_set_volume,
+    "audio.set_mute": audio_set_mute,
+
+
+
 
 }
 

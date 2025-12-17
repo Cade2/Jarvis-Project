@@ -6,6 +6,9 @@ import time
 
 import psutil
 
+import urllib.parse
+
+
 # Simple topic -> ms-settings URI map (we can grow this over time)
 SETTINGS_MAP = {
     # System / Display / Sound / Power
@@ -80,13 +83,21 @@ def settings_open(params: Dict[str, Any]) -> Dict[str, Any]:
         target = "system"
 
     # Allow passing a full ms-settings URI
+        # Allow passing a full ms-settings URI
     if target.startswith("ms-settings:"):
         uri = target
     else:
         uri = SETTINGS_MAP.get(target, None)
+
         if uri is None:
-            # Try a few normalizations
-            uri = SETTINGS_MAP.get(target.replace("_", " ").replace("-", " "), "ms-settings:system")
+            # Try a few normalizations first
+            norm = target.replace("_", " ").replace("-", " ").strip()
+            uri = SETTINGS_MAP.get(norm, None)
+
+        # ✅ Best fallback: use Settings search
+        if uri is None:
+            q = urllib.parse.quote(target)
+            uri = f"ms-settings:search?query={q}"
 
     if os.name != "nt":
         return {"error": "settings.open is only supported on Windows."}

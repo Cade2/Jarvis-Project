@@ -344,4 +344,34 @@ try {
 
     return {"result": {"devices": clean}}
 
+def bluetooth_connect_paired(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    v0: Best-effort "connect" placeholder.
+
+    Real connection requires UI Automation (UIA) or deeper WinRT APIs.
+    For now we open the Bluetooth Settings page so the user can click Connect.
+
+    params:
+      - name: optional device name to connect
+    """
+    if os.name != "nt":
+        return {"error": "bluetooth.connect_paired is only implemented on Windows right now."}
+
+    name = (params.get("name") or "").strip()
+
+    # Open Bluetooth settings page
+    try:
+        subprocess.Popen(["cmd", "/c", "start", "", "ms-settings:bluetooth"], shell=False)
+        return {
+            "result": {
+                "supported": False,
+                "action": "open_settings",
+                "uri": "ms-settings:bluetooth",
+                "requested_device": name or None,
+                "note": "UIA-based connect will be added later. For now, Settings is opened to connect manually.",
+            }
+        }
+    except Exception as e:
+        return {"result": {"supported": False, "error": str(e), "requested_device": name or None}}
+
 

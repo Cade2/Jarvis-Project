@@ -9,6 +9,7 @@ allow_domains:
   - settings
   - runner
   - bluetooth
+  - audio
   - uia
 
 allowed_domains:
@@ -29,6 +30,13 @@ allowed_domains:
   - bluetooth.toggle
   - bluetooth.list_paired
   - bluetooth.connect_paired
+  - audio.get_state   
+  - audio.set_volume    
+  - audio.set_mute
+
+
+
+  - uia.get_status
 
 ui_automation:
   enabled: false

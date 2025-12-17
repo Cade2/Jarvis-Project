@@ -343,8 +343,34 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("bluetooth.connect_paired"),
     ),
+        "audio.get_state": Tool(
+        name="audio.get_state",
+        description="Read master volume + mute state.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("audio.get_state"),
+    ),
+    "audio.set_volume": Tool(
+        name="audio.set_volume",
+        description="Set master volume (0-100) with verification.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("audio.set_volume"),
+    ),
+    "audio.set_mute": Tool(
+        name="audio.set_mute",
+        description="Mute/unmute audio with verification.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("audio.set_mute"),
+    ),
 
 
+
+
+        "uia.get_status": Tool(
+        name="uia.get_status",
+        description="UI Automation status (scaffolded; disabled by default).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("uia.get_status"),
+    ),
 
 })
 
