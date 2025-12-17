@@ -337,7 +337,12 @@ TOOLS.update({
         risk=RiskLevel.READ_ONLY,
         func=_runner_tool("bluetooth.list_paired"),
     ),
-
+    "bluetooth.connect_paired": Tool(
+        name="bluetooth.connect_paired",
+        description="Best-effort connect to a paired device (v0 opens Bluetooth settings).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("bluetooth.connect_paired"),
+    ),
 
 
 

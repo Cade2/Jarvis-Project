@@ -28,12 +28,7 @@ allowed_domains:
   - bluetooth.get_state
   - bluetooth.toggle
   - bluetooth.list_paired
-  - runner.is_elevated
-  - runner.relaunch_elevated
-
-
-
-
+  - bluetooth.connect_paired
 
 ui_automation:
   enabled: false

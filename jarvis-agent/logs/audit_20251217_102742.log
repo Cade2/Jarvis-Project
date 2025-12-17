@@ -1,3 +1,4 @@
 # Jarvis audit session started 2025-12-17T10:27:42.886899
 2025-12-17T10:27:51.675396 | bluetooth.get_state | {} | success
 2025-12-17T10:28:07.263480 | bluetooth.list_paired | {} | success
+2025-12-17T10:51:22.353866 | close_application | {'app_name': 'commnad prompt'} | success

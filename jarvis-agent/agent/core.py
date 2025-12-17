@@ -282,7 +282,17 @@ def handle_user_message(user_message: str) -> None:
     if normalized in ("list paired devices", "paired devices", "bluetooth paired", "list bluetooth"):
         _run_tool("bluetooth.list_paired", {})
         return
-
+    # Connect paired device (v0)
+    # examples:
+    #   "connect bluetooth AirPods"
+    #   "bluetooth connect AirPods"
+    if normalized.startswith("connect bluetooth ") or normalized.startswith("bluetooth connect "):
+        name = raw.split(" ", 2)[2].strip()  # everything after first two words
+        if not name:
+            print("Jarvis: Please provide the device name, e.g. 'connect bluetooth AirPods'.")
+            return
+        _run_tool("bluetooth.connect_paired", {"name": name})
+        return
 
 
 

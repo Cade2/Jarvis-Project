@@ -9,7 +9,7 @@ from .tools_apps import apps_list_installed, apps_open, apps_close
 from .tools_network import network_get_state, network_toggle_wifi, network_toggle_airplane_mode
 from .tools_display import display_get_state, display_set_brightness
 from .tools_runner import runner_is_elevated
-from .tools_bluetooth import bluetooth_get_state, bluetooth_toggle, bluetooth_list_paired
+from .tools_bluetooth import bluetooth_get_state, bluetooth_toggle, bluetooth_list_paired, bluetooth_connect_paired
 
 
 
@@ -36,7 +36,7 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "bluetooth.get_state": bluetooth_get_state,
     "bluetooth.toggle": bluetooth_toggle,
     "bluetooth.list_paired": bluetooth_list_paired,
-
+    "bluetooth.connect_paired": bluetooth_connect_paired,
     
 
 }
