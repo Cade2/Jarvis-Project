@@ -6,6 +6,8 @@ from pathlib import Path
 from .policy import Policy
 from .runner_manager import ensure_runner_started
 from .runner_client import RunnerClient
+from .elevation import relaunch_runner_elevated
+
 
 
 from .safety import Tool, RiskLevel
@@ -305,6 +307,38 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("display.set_brightness"),
     ),
+    "runner.is_elevated": Tool(
+        name="runner.is_elevated",
+        description="Check whether the runner is running as Administrator.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("runner.is_elevated"),
+    ),
+    "runner.relaunch_elevated": Tool(
+        name="runner.relaunch_elevated",
+        description="Relaunch the runner as Administrator (UAC prompt).",
+        risk=RiskLevel.HIGH,
+        func=relaunch_runner_elevated,
+    ),
+    "bluetooth.get_state": Tool(
+        name="bluetooth.get_state",
+        description="Read Bluetooth radio state (best effort).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("bluetooth.get_state"),
+    ),
+    "bluetooth.toggle": Tool(
+        name="bluetooth.toggle",
+        description="Enable/disable Bluetooth (verified before/after).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("bluetooth.toggle"),
+    ),
+    "bluetooth.list_paired": Tool(
+        name="bluetooth.list_paired",
+        description="List paired Bluetooth devices.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("bluetooth.list_paired"),
+    ),
+
+
 
 
 })

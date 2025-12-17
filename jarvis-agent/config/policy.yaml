@@ -8,6 +8,7 @@ allow_domains:
   - display
   - settings
   - runner
+  - bluetooth
   - uia
 
 allowed_domains:
@@ -22,6 +23,15 @@ allowed_domains:
   - network.toggle_airplane_mode
   - display.get_state
   - display.set_brightness
+  - runner.is_elevated
+  - runner.relaunch_elevated
+  - bluetooth.get_state
+  - bluetooth.toggle
+  - bluetooth.list_paired
+  - runner.is_elevated
+  - runner.relaunch_elevated
+
+
 
 
 

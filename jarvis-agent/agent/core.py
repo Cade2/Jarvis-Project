@@ -225,6 +225,13 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("settings.open", {"target": "airplane mode"})
         return
 
+    if normalized in ("runner elevated?", "runner is elevated", "runner admin", "runner status"):
+        _run_tool("runner.is_elevated", {})
+        return
+
+    if normalized in ("elevate runner", "runner elevate", "runner restart admin"):
+        _run_tool("runner.relaunch_elevated", {})
+        return
 
         # Display state
     if normalized in ("display state", "display status", "brightness", "brightness status"):
@@ -256,6 +263,32 @@ def handle_user_message(user_message: str) -> None:
             return
         _run_tool("display.set_brightness", {"level": max(0, int(cur) - 10)})
         return
+
+    # Bluetooth status
+    if normalized in ("bluetooth status", "bluetooth state", "bt status", "bt state"):
+        _run_tool("bluetooth.get_state", {})
+        return
+
+    # Bluetooth on/off
+    if normalized in ("bluetooth on", "turn bluetooth on", "enable bluetooth"):
+        _run_tool("bluetooth.toggle", {"enabled": True})
+        return
+
+    if normalized in ("bluetooth off", "turn bluetooth off", "disable bluetooth"):
+        _run_tool("bluetooth.toggle", {"enabled": False})
+        return
+
+        # List paired bluetooth devices
+    if normalized in ("list paired devices", "paired devices", "bluetooth paired", "list bluetooth"):
+        _run_tool("bluetooth.list_paired", {})
+        return
+
+
+
+
+
+
+
 
 
     # 0) Summarise text
