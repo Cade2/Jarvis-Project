@@ -24,6 +24,15 @@ allowed_domains:
   - network.toggle_airplane_mode
   - display.get_state
   - display.set_brightness
+  - display.list_displays
+  - display.set_resolution
+  - display.set_refresh_rate
+  - display.set_orientation
+  - display.set_multiple_displays
+  - display.set_scale
+  - display.open_color_profile
+  - display.open_hdr_settings
+  - display.open_night_light
   - runner.is_elevated
   - runner.relaunch_elevated
   - bluetooth.get_state

@@ -7,7 +7,20 @@ from .tools_settings import settings_open
 from .tools_system import system_get_info, system_get_storage
 from .tools_apps import apps_list_installed, apps_open, apps_close
 from .tools_network import network_get_state, network_toggle_wifi, network_toggle_airplane_mode
-from .tools_display import display_get_state, display_set_brightness
+from .tools_display import (
+    display_get_state,
+    display_set_brightness,
+    display_list_displays,
+    display_set_resolution,
+    display_set_refresh_rate,
+    display_set_orientation,
+    display_set_multiple_displays,
+    display_set_scale,
+    display_open_color_profile,
+    display_open_hdr_settings,
+    display_open_night_light,
+)
+
 from .tools_runner import runner_is_elevated
 from .tools_bluetooth import bluetooth_get_state, bluetooth_toggle, bluetooth_list_paired, bluetooth_connect_paired
 from .tools_uia import uia_get_status
@@ -34,6 +47,18 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
 
     "display.get_state": display_get_state,
     "display.set_brightness": display_set_brightness,
+
+    # Display (MK2 additions)
+    "display.list_displays": display_list_displays,
+    "display.set_resolution": display_set_resolution,
+    "display.set_refresh_rate": display_set_refresh_rate,
+    "display.set_orientation": display_set_orientation,
+    "display.set_multiple_displays": display_set_multiple_displays,
+    "display.set_scale": display_set_scale,
+    "display.open_color_profile": display_open_color_profile,
+    "display.open_hdr_settings": display_open_hdr_settings,
+    "display.open_night_light": display_open_night_light,
+
 
     "runner.is_elevated": runner_is_elevated,
 

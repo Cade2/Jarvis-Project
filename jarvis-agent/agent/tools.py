@@ -307,6 +307,62 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("display.set_brightness"),
     ),
+    # Display (MK2 additions)
+    "display.list_displays": Tool(
+        name="display.list_displays",
+        description="List connected displays and their current modes.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("display.list_displays"),
+    ),
+    "display.set_resolution": Tool(
+        name="display.set_resolution",
+        description="Set a display's resolution (width/height).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("display.set_resolution"),
+    ),
+    "display.set_refresh_rate": Tool(
+        name="display.set_refresh_rate",
+        description="Set a display's refresh rate (Hz).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("display.set_refresh_rate"),
+    ),
+    "display.set_orientation": Tool(
+        name="display.set_orientation",
+        description="Set a display's orientation (landscape/portrait/etc.).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("display.set_orientation"),
+    ),
+    "display.set_multiple_displays": Tool(
+        name="display.set_multiple_displays",
+        description="Switch multi-monitor mode (extend/duplicate/second screen only/PC screen only).",
+        risk=RiskLevel.HIGH,
+        func=_runner_tool("display.set_multiple_displays"),
+    ),
+    "display.set_scale": Tool(
+        name="display.set_scale",
+        description="Set scaling percentage (may require sign-out/in).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("display.set_scale"),
+    ),
+    "display.open_color_profile": Tool(
+        name="display.open_color_profile",
+        description="Open Color Management (color profiles).",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("display.open_color_profile"),
+    ),
+    "display.open_hdr_settings": Tool(
+        name="display.open_hdr_settings",
+        description="Open HDR settings (fallback).",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("display.open_hdr_settings"),
+    ),
+    "display.open_night_light": Tool(
+        name="display.open_night_light",
+        description="Open Night light settings (fallback).",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("display.open_night_light"),
+    ),
+
     "runner.is_elevated": Tool(
         name="runner.is_elevated",
         description="Check whether the runner is running as Administrator.",
