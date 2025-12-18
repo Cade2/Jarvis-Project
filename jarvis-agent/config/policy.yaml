@@ -10,6 +10,7 @@ allow_domains:
   - runner
   - bluetooth
   - audio
+  - power
   - uia
 
 allowed_domains:
@@ -42,6 +43,11 @@ allowed_domains:
   - audio.get_state   
   - audio.set_volume    
   - audio.set_mute
+  - power.get_state
+  - power.list_schemes
+  - power.set_scheme
+  - power.get_mode
+  - power.set_mode
 
 
 

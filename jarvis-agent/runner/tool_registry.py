@@ -25,7 +25,8 @@ from .tools_runner import runner_is_elevated
 from .tools_bluetooth import bluetooth_get_state, bluetooth_toggle, bluetooth_list_paired, bluetooth_connect_paired
 from .tools_uia import uia_get_status
 from .tools_audio import audio_get_state, audio_set_volume, audio_set_mute
-
+from .tools_power import power_get_state, power_list_schemes, power_set_scheme
+from .tools_power import power_get_mode, power_set_mode
 
 
 
@@ -73,7 +74,12 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "audio.set_volume": audio_set_volume,
     "audio.set_mute": audio_set_mute,
 
+    "power.get_state": power_get_state,
+    "power.list_schemes": power_list_schemes,
+    "power.set_scheme": power_set_scheme,
 
+    "power.get_mode": power_get_mode,
+    "power.set_mode": power_set_mode,
 
 
 }

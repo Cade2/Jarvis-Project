@@ -417,7 +417,36 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("audio.set_mute"),
     ),
-
+    "power.get_state": Tool(
+        name="power.get_state",
+        description="Read power plan state + battery info (best effort).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.get_state"),
+    ),
+    "power.list_schemes": Tool(
+        name="power.list_schemes",
+        description="List available power plans.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.list_schemes"),
+    ),
+    "power.set_scheme": Tool(
+        name="power.set_scheme",
+        description="Switch active power plan (balanced/high performance/power saver).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.set_scheme"),
+    ),
+    "power.get_mode": Tool(
+        name="power.get_mode",
+        description="Read Windows 11 Power Mode (plugged in / on battery).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.get_mode"),
+    ),
+    "power.set_mode": Tool(
+        name="power.set_mode",
+        description="Set Windows 11 Power Mode (best_power_efficiency/balanced/best_performance).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.set_mode"),
+    ),
 
 
 

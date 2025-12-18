@@ -360,6 +360,33 @@ def handle_user_message(user_message: str) -> None:
         target = raw.strip()[len("settings "):].strip()
         _run_tool("settings.open", {"target": target or "system"})
         return
+    
+    # Power
+    if normalized in ("power status", "battery status", "power state", "power plan"):
+        _run_tool("power.get_state", {})
+        return
+
+    if normalized in ("list power plans", "list power schemes", "power plans"):
+        _run_tool("power.list_schemes", {})
+        return
+
+    m = re.search(r"(?:set\s+)?power\s+plan(?:\s+to)?\s+(.+)$", text_lower)
+    if m:
+        plan = m.group(1).strip()
+        _run_tool("power.set_scheme", {"name": plan})
+        return
+    
+    if normalized in ("power mode", "power mode status", "power mode state"):
+        _run_tool("power.get_mode", {})
+        return
+
+    m = re.search(r"(?:set\s+)?power\s+mode(?:\s+to)?\s+(.+)$", text_lower)
+    if m:
+        mode = m.group(1).strip()
+        _run_tool("power.set_mode", {"mode": mode, "apply_to": "both"})
+        return
+    
+
 
     # Network
     if normalized in ("network status", "network state", "wifi status", "wifi state"):
