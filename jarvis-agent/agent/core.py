@@ -122,6 +122,10 @@ KNOWN_COMMANDS = set(ALIASES.keys()) | {
     "nearby sharing off", "nearby sharing my devices only", "nearby sharing everyone nearby",
     "rename nearby sharing", "set nearby sharing name",
 
+    "multitasking status",
+    "snap windows on/off",
+    "title bar shake on/off",
+    "alt tab tabs 3/5/20/off",
 
 }
 
@@ -711,6 +715,42 @@ def handle_user_message(user_message: str) -> None:
             print("Jarvis: Please provide a name, e.g. 'rename nearby sharing to Cade'.")
             return
         _run_tool("nearby.set_friendly_name", {"name": new_name})
+        return
+
+
+    # -------------------------
+    # Multitasking
+    # -------------------------
+    if normalized in ("multitasking status", "multitasking state"):
+        _run_tool("multitasking.get_state", {})
+        return
+
+    if normalized in ("snap windows on", "enable snap windows"):
+        _run_tool("multitasking.set_snap_windows", {"enabled": True})
+        return
+
+    if normalized in ("snap windows off", "disable snap windows"):
+        _run_tool("multitasking.set_snap_windows", {"enabled": False})
+        return
+
+    if normalized in ("title bar shake on", "enable title bar shake", "enable window shake"):
+        _run_tool("multitasking.set_title_bar_shake", {"enabled": True})
+        return
+
+    if normalized in ("title bar shake off", "disable title bar shake", "disable window shake"):
+        _run_tool("multitasking.set_title_bar_shake", {"enabled": False})
+        return
+
+    # "alt tab tabs 5" | "alt tab tabs off"
+    if text_lower.startswith("alt tab tabs"):
+        if "off" in text_lower or "dont" in text_lower:
+            _run_tool("multitasking.set_alt_tab_tabs", {"tabs": "dont_show"})
+            return
+        n = _extract_int(text_lower)
+        if n in (3, 5, 20):
+            _run_tool("multitasking.set_alt_tab_tabs", {"tabs": str(n)})
+            return
+        print("Jarvis: Use 'alt tab tabs 3', 'alt tab tabs 5', 'alt tab tabs 20', or 'alt tab tabs off'.")
         return
 
 

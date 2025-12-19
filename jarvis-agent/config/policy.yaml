@@ -13,6 +13,7 @@ allow_domains:
   - power
   - uia
   - nearby
+  - multitasking
 
 allowed_domains:
   - system.get_info

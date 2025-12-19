@@ -7,7 +7,7 @@ from .policy import Policy
 from .runner_manager import ensure_runner_started
 from .runner_client import RunnerClient
 from .elevation import relaunch_runner_elevated
-
+from .safety import Tool, RiskLevel
 
 
 from .safety import Tool, RiskLevel
@@ -565,7 +565,30 @@ TOOLS.update({
         risk=RiskLevel.HIGH,
         func=_runner_tool("nearby.set_friendly_name"),
     ),
-
+    "multitasking.get_state": Tool(
+        name="multitasking.get_state",
+        description="Get multitasking settings (snap windows, title bar shake, Alt+Tab tabs).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("multitasking.get_state"),
+    ),
+    "multitasking.set_snap_windows": Tool(
+        name="multitasking.set_snap_windows",
+        description="Enable/disable Snap windows.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("multitasking.set_snap_windows"),
+    ),
+    "multitasking.set_title_bar_shake": Tool(
+        name="multitasking.set_title_bar_shake",
+        description="Enable/disable Title bar window shake (Aero Shake).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("multitasking.set_title_bar_shake"),
+    ),
+    "multitasking.set_alt_tab_tabs": Tool(
+        name="multitasking.set_alt_tab_tabs",
+        description="Set Alt+Tab tabs from apps: dont_show | 3 | 5 | 20.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("multitasking.set_alt_tab_tabs"),
+    ),
 
 
 

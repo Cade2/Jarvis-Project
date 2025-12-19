@@ -53,6 +53,14 @@ from .tools_nearby_sharing import (
     nearby_set_friendly_name,
 )
 
+from .tools_multitasking import (
+    multitasking_get_state,
+    multitasking_set_snap_windows,
+    multitasking_set_title_bar_shake,
+    multitasking_set_alt_tab_tabs,
+)
+
+
 
 
 
@@ -133,6 +141,10 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "nearby.set_mode": nearby_set_mode,
     "nearby.set_friendly_name": nearby_set_friendly_name,
 
+    "multitasking.get_state": multitasking_get_state,
+    "multitasking.set_snap_windows": multitasking_set_snap_windows,
+    "multitasking.set_title_bar_shake": multitasking_set_title_bar_shake,
+    "multitasking.set_alt_tab_tabs": multitasking_set_alt_tab_tabs,
 
 
 
