@@ -631,6 +631,24 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("advanced.set_show_run_as_different_user_in_start"),
     ),
+    "troubleshoot.list": Tool(
+        name="troubleshoot.list",
+        description="List known troubleshooters and whether msdt.exe is available.",
+        func=_runner_tool("troubleshoot.list"),
+        risk=RiskLevel.LOW,
+    ),
+    "troubleshoot.open_settings": Tool(
+        name="troubleshoot.open_settings",
+        description="Open Windows Settings → System → Troubleshoot.",
+        func=_runner_tool("troubleshoot.open_settings"),
+        risk=RiskLevel.LOW,
+    ),
+    "troubleshoot.run": Tool(
+        name="troubleshoot.run",
+        description="Run a troubleshooter (best-effort). May launch legacy msdt UI or fall back to Settings.",
+        func=_runner_tool("troubleshoot.run"),
+        risk=RiskLevel.MEDIUM,
+    ),
 
 
 

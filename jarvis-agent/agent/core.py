@@ -269,6 +269,9 @@ def _tools_for_message(lower: str) -> Dict[str, Tool]:
     if any(w in lower for w in ("storage", "disk", "drive", "cleanup", "recycle bin", "downloads", "temp")):
         add("storage.")
 
+    if any(w in lower for w in ("troubleshoot", "troubleshooter", "diagnostic", "fix issues")):
+        add("troubleshoot.")
+
 
     # If we still ended up with too many, keep it small:
     # (display tools can be many; but still manageable)
@@ -487,6 +490,31 @@ def handle_user_message(user_message: str) -> None:
                       "show run as different user on", "show run as different user off"):
         _run_tool("advanced.set_show_run_as_different_user_in_start", {"enabled": "on" in normalized})
         return
+
+    if normalized in ("troubleshoot list", "list troubleshooters", "troubleshooters"):
+        _run_tool("troubleshoot.list", {})
+        return
+
+    m = re.search(r"(?:run|start)\s+(.+?)\s+troubleshooter", text_lower)
+    if m:
+        name = m.group(1).strip()
+        _run_tool("troubleshoot.run", {"name": name})
+        return
+
+    if normalized in ("open troubleshoot", "open troubleshoot settings", "troubleshoot settings"):
+        _run_tool("troubleshoot.open_settings", {})
+        return
+
+    # Run by ID:
+    # "troubleshoot run id AudioPlaybackDiagnostic"
+    if text_lower.startswith("troubleshoot run id "):
+        tid = raw.strip()[len("troubleshoot run id "):].strip()
+        if not tid:
+            print("Jarvis: Please provide an ID, e.g. 'troubleshoot run id AudioPlaybackDiagnostic'.")
+            return
+        _run_tool("troubleshoot.run", {"id": tid})
+        return
+
 
 
     # Power

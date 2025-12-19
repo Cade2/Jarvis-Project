@@ -15,6 +15,7 @@ allow_domains:
   - nearby
   - multitasking
   - advanced
+  - troubleshoot
 
 allowed_domains:
   - system.get_info
@@ -52,6 +53,7 @@ allowed_domains:
   - power.get_mode
   - power.set_mode
   - power.srum_report
+
 
 
 

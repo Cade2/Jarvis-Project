@@ -70,6 +70,13 @@ from .tools_advanced_settings import (
     advanced_set_show_run_as_different_user_in_start,
 )
 
+from .tools_troubleshoot import (
+    troubleshoot_list,
+    troubleshoot_open_settings,
+    troubleshoot_run,
+)
+
+
 
 
 
@@ -162,6 +169,12 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "advanced.set_show_full_path_in_title_bar": advanced_set_show_full_path_in_title_bar,
     "advanced.set_show_empty_drives": advanced_set_show_empty_drives,
     "advanced.set_show_run_as_different_user_in_start": advanced_set_show_run_as_different_user_in_start,
+
+    # Troubleshooters
+    "troubleshoot.list": troubleshoot_list,
+    "troubleshoot.open_settings": troubleshoot_open_settings,
+    "troubleshoot.run": troubleshoot_run,
+
 
 
 
