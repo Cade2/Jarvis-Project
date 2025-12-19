@@ -547,6 +547,24 @@ TOOLS.update({
         risk=RiskLevel.READ_ONLY,
         func=_runner_tool("storage.cleanup_recommendations"),
     ),
+    "nearby.get_state": Tool(
+        name="nearby.get_state",
+        description="Read Nearby sharing mode + friendly discoverable name (best effort).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("nearby.get_state"),
+    ),
+    "nearby.set_mode": Tool(
+        name="nearby.set_mode",
+        description="Set Nearby sharing mode (off / my devices only / everyone nearby).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("nearby.set_mode"),
+    ),
+    "nearby.set_friendly_name": Tool(
+        name="nearby.set_friendly_name",
+        description="Rename Nearby sharing discoverable friendly name (admin required).",
+        risk=RiskLevel.HIGH,
+        func=_runner_tool("nearby.set_friendly_name"),
+    ),
 
 
 

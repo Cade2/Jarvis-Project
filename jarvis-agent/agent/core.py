@@ -118,6 +118,10 @@ KNOWN_COMMANDS = set(ALIASES.keys()) | {
     "storage categories deep", "storage breakdown deep", "storage usage deep",
     "cleanup recommendations deep", "storage cleanup deep", "cleanup storage deep",
 
+    "nearby sharing status", "nearby sharing state",
+    "nearby sharing off", "nearby sharing my devices only", "nearby sharing everyone nearby",
+    "rename nearby sharing", "set nearby sharing name",
+
 
 }
 
@@ -677,6 +681,39 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("network.toggle_airplane_mode", {"enabled": False})
         _run_tool("settings.open", {"target": "airplane mode"})
         return
+    
+    # -------------------------
+    # Nearby sharing (MK2)
+    # -------------------------
+    if normalized in ("nearby sharing status", "nearby sharing state"):
+        _run_tool("nearby.get_state", {})
+        return
+
+    if normalized in ("nearby sharing off", "turn off nearby sharing"):
+        _run_tool("nearby.set_mode", {"mode": "off"})
+        return
+
+    if normalized in ("nearby sharing my devices only", "nearby sharing my devices", "my devices only"):
+        _run_tool("nearby.set_mode", {"mode": "my_devices_only"})
+        return
+
+    if normalized in ("nearby sharing everyone nearby", "nearby sharing everyone", "everyone nearby"):
+        _run_tool("nearby.set_mode", {"mode": "everyone_nearby"})
+        return
+
+    # rename:
+    # "rename nearby sharing to Cade"
+    # "set nearby sharing name to Cade"
+    m = re.search(r"(?:rename|set)\s+nearby\s+sharing(?:\s+(?:name|device name|friendly name|discoverable name))?\s+to\s+(.+)$", raw, flags=re.I)
+    if m:
+        new_name = m.group(1).strip().strip('"')
+        if not new_name:
+            print("Jarvis: Please provide a name, e.g. 'rename nearby sharing to Cade'.")
+            return
+        _run_tool("nearby.set_friendly_name", {"name": new_name})
+        return
+
+
 
     # Runner elevation
     if normalized in ("runner is elevated", "runner elevated?", "runner admin", "runner status"):

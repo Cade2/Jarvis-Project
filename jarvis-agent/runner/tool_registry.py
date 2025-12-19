@@ -47,6 +47,12 @@ from runner.tools_power_timeouts import (
 from runner.tools_power_usage import power_srum_report
 from .tools_storage import storage_get_categories, storage_cleanup_recommendations
 
+from .tools_nearby_sharing import (
+    nearby_get_state,
+    nearby_set_mode,
+    nearby_set_friendly_name,
+)
+
 
 
 
@@ -122,7 +128,11 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "storage.get_categories": storage_get_categories,
     "storage.cleanup_recommendations": storage_cleanup_recommendations,
 
-    
+    # Nearby sharing (MK2)
+    "nearby.get_state": nearby_get_state,
+    "nearby.set_mode": nearby_set_mode,
+    "nearby.set_friendly_name": nearby_set_friendly_name,
+
 
 
 

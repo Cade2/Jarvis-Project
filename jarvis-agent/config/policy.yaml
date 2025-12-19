@@ -12,6 +12,7 @@ allow_domains:
   - audio
   - power
   - uia
+  - nearby
 
 allowed_domains:
   - system.get_info
