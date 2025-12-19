@@ -16,6 +16,7 @@ allow_domains:
   - multitasking
   - advanced
   - troubleshoot
+  - about
 
 allowed_domains:
   - system.get_info

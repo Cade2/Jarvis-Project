@@ -415,6 +415,17 @@ def handle_user_message(user_message: str) -> None:
     if normalized in ("system info", "my system", "pc info"):
         _run_tool("system.get_info", {})
         return
+    
+    if normalized in ("about", "about status", "pc about", "device about", "device specs"):
+        _run_tool("about.get_state", {})
+        return
+
+    m = re.search(r"(?:rename|set)\s+(?:this\s+)?(?:pc|computer|device)\s*(?:name)?\s*(?:to)?\s+(.+)$", text_lower)
+    if m:
+        new_name = m.group(1).strip()
+        _run_tool("about.rename_pc", {"name": new_name})
+        return
+
 
     if normalized in ("storage", "disk space", "drive space"):
         _run_tool("system.get_storage", {})

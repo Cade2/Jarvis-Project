@@ -649,6 +649,19 @@ TOOLS.update({
         func=_runner_tool("troubleshoot.run"),
         risk=RiskLevel.MEDIUM,
     ),
+    "about.get_state": Tool(
+    name="about.get_state",
+    description="Get About info for this PC (CPU/RAM/GPU/Windows version, etc).",
+    func=_runner_tool("about.get_state"),
+    risk=RiskLevel.LOW,
+    ),
+    "about.rename_pc": Tool(
+        name="about.rename_pc",
+        description="Rename this PC (admin + restart required, restart needed to fully apply).",
+        func=_runner_tool("about.rename_pc"),
+        risk=RiskLevel.HIGH,
+    ),
+
 
 
 

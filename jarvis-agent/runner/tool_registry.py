@@ -76,6 +76,7 @@ from .tools_troubleshoot import (
     troubleshoot_run,
 )
 
+from .tools_about import about_get_state, about_rename_pc
 
 
 
@@ -174,6 +175,9 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "troubleshoot.list": troubleshoot_list,
     "troubleshoot.open_settings": troubleshoot_open_settings,
     "troubleshoot.run": troubleshoot_run,
+
+    "about.get_state": about_get_state,
+    "about.rename_pc": about_rename_pc,
 
 
 
