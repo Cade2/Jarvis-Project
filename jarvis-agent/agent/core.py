@@ -451,6 +451,43 @@ def handle_user_message(user_message: str) -> None:
         target = raw.strip()[len("settings "):].strip()
         _run_tool("settings.open", {"target": target or "system"})
         return
+    
+    
+    # -------------------------
+    # System > Advanced (MK2)
+    # -------------------------
+    if normalized in ("advanced status", "system advanced status", "advanced settings status"):
+        _run_tool("advanced.get_state", {})
+        return
+
+    if normalized in ("end task on", "end task off"):
+        _run_tool("advanced.set_end_task_in_taskbar", {"enabled": normalized.endswith("on")})
+        return
+
+    if normalized in ("file extensions on", "file extensions off",
+                      "show file extensions on", "show file extensions off"):
+        _run_tool("advanced.set_show_file_extensions", {"enabled": normalized.endswith("on")})
+        return
+
+
+    if normalized in ("hidden files on", "hidden files off", "show hidden files on", "show hidden files off",
+                      "hidden & system files on", "hidden & system files off", "show hidden & system files on", "show hidden & system files off"):
+        _run_tool("advanced.set_show_hidden_and_system_files", {"enabled": "on" in normalized})
+        return
+
+    if normalized in ("full path on", "full path off", "show full path on", "show full path off"):
+        _run_tool("advanced.set_show_full_path_in_title_bar", {"enabled": "on" in normalized})
+        return
+
+    if normalized in ("empty drives on", "empty drives off", "show empty drives on", "show empty drives off"):
+        _run_tool("advanced.set_show_empty_drives", {"enabled": "on" in normalized})
+        return
+
+    if normalized in ("run as different user on", "run as different user off",
+                      "show run as different user on", "show run as different user off"):
+        _run_tool("advanced.set_show_run_as_different_user_in_start", {"enabled": "on" in normalized})
+        return
+
 
     # Power
     if normalized in ("power status", "battery status", "power state", "power plan"):

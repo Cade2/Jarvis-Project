@@ -589,6 +589,49 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("multitasking.set_alt_tab_tabs"),
     ),
+        "advanced.get_state": Tool(
+        name="advanced.get_state",
+        description="Read System > Advanced toggles (End Task + File Explorer options).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("advanced.get_state"),
+    ),
+    "advanced.set_end_task_in_taskbar": Tool(
+        name="advanced.set_end_task_in_taskbar",
+        description="Enable/disable End Task in taskbar right-click menu.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("advanced.set_end_task_in_taskbar"),
+    ),
+    "advanced.set_show_file_extensions": Tool(
+        name="advanced.set_show_file_extensions",
+        description="Show/hide file extensions in File Explorer.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("advanced.set_show_file_extensions"),
+    ),
+    "advanced.set_show_hidden_and_system_files": Tool(
+        name="advanced.set_show_hidden_and_system_files",
+        description="Show/hide hidden + system files in File Explorer.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("advanced.set_show_hidden_and_system_files"),
+    ),
+    "advanced.set_show_full_path_in_title_bar": Tool(
+        name="advanced.set_show_full_path_in_title_bar",
+        description="Show/hide full path in File Explorer title bar.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("advanced.set_show_full_path_in_title_bar"),
+    ),
+    "advanced.set_show_empty_drives": Tool(
+        name="advanced.set_show_empty_drives",
+        description="Show/hide empty drives in File Explorer.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("advanced.set_show_empty_drives"),
+    ),
+    "advanced.set_show_run_as_different_user_in_start": Tool(
+        name="advanced.set_show_run_as_different_user_in_start",
+        description="Show/hide 'Run as different user' in Start menu.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("advanced.set_show_run_as_different_user_in_start"),
+    ),
+
 
 
 

@@ -60,6 +60,15 @@ from .tools_multitasking import (
     multitasking_set_alt_tab_tabs,
 )
 
+from .tools_advanced_settings import (
+    advanced_get_state,
+    advanced_set_end_task_in_taskbar,
+    advanced_set_show_file_extensions,
+    advanced_set_show_hidden_and_system_files,
+    advanced_set_show_full_path_in_title_bar,
+    advanced_set_show_empty_drives,
+    advanced_set_show_run_as_different_user_in_start,
+)
 
 
 
@@ -145,6 +154,14 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "multitasking.set_snap_windows": multitasking_set_snap_windows,
     "multitasking.set_title_bar_shake": multitasking_set_title_bar_shake,
     "multitasking.set_alt_tab_tabs": multitasking_set_alt_tab_tabs,
+
+    "advanced.get_state": advanced_get_state,
+    "advanced.set_end_task_in_taskbar": advanced_set_end_task_in_taskbar,
+    "advanced.set_show_file_extensions": advanced_set_show_file_extensions,
+    "advanced.set_show_hidden_and_system_files": advanced_set_show_hidden_and_system_files,
+    "advanced.set_show_full_path_in_title_bar": advanced_set_show_full_path_in_title_bar,
+    "advanced.set_show_empty_drives": advanced_set_show_empty_drives,
+    "advanced.set_show_run_as_different_user_in_start": advanced_set_show_run_as_different_user_in_start,
 
 
 
