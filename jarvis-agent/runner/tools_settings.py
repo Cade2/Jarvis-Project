@@ -28,6 +28,9 @@ SETTINGS_MAP = {
     "vpn": "ms-settings:network-vpn",
     "proxy": "ms-settings:network-proxy",
     "ethernet": "ms-settings:network-ethernet",
+    "mobile hotspot": "ms-settings:network-mobilehotspot",
+    "hotspot": "ms-settings:network-mobilehotspot",
+
 
     # Bluetooth & devices
     "bluetooth": "ms-settings:bluetooth",
@@ -58,6 +61,7 @@ SETTINGS_MAP = {
     "windows security": "ms-settings:windowsdefender",
     "updates": "ms-settings:windowsupdate",
     "windows update": "ms-settings:windowsupdate",
+
 }
 
 

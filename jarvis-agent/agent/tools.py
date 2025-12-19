@@ -667,6 +667,42 @@ TOOLS.update({
         risk=RiskLevel.READ_ONLY,
         func=_runner_tool("network.list_wifi_networks"),
     ),
+    "network.list_wifi_networks": Tool(
+        name="network.list_wifi_networks",
+        description="Scan nearby Wi-Fi networks and flag which ones are saved profiles on this PC.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("network.list_wifi_networks"),
+    ),
+    "network.get_data_usage_total": Tool(
+        name="network.get_data_usage_total",
+        description="Get total data usage counters (bytes sent/received) for network adapters since boot.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("network.get_data_usage_total"),
+    ),
+    "network.get_data_usage_current_wifi": Tool(
+        name="network.get_data_usage_current_wifi",
+        description="Get data usage for the current Wi-Fi SSID (session tracked) plus adapter totals since boot.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("network.get_data_usage_current_wifi"),
+    ),
+    "network.get_connection_properties": Tool(
+        name="network.get_connection_properties",
+        description="Show network hardware and connection properties (adapters + IP config + Wi-Fi interface).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("network.get_connection_properties"),
+    ),
+    "network.hotspot_status": Tool(
+        name="network.hotspot_status",
+        description="Show Mobile Hotspot status and SSID (does not show password).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("network.hotspot_status"),
+    ),
+    "network.hotspot_toggle": Tool(
+        name="network.hotspot_toggle",
+        description="Turn Mobile Hotspot on/off (Windows 10/11).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("network.hotspot_toggle"),
+    ),
 
 
 

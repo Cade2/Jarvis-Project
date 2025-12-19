@@ -6,7 +6,18 @@ from .tools_settings import settings_open
 
 from .tools_system import system_get_info, system_get_storage
 from .tools_apps import apps_list_installed, apps_open, apps_close
-from .tools_network import network_get_state, network_toggle_wifi, network_toggle_airplane_mode
+from .tools_network import (
+    network_get_state,
+    network_toggle_wifi,
+    network_toggle_airplane_mode,
+    network_list_wifi_networks,
+    network_get_data_usage_total,
+    network_get_data_usage_current_wifi,
+    network_get_connection_properties,
+    network_hotspot_status,
+    network_hotspot_toggle,
+)
+
 from .tools_display import (
     display_get_state,
     display_set_brightness,
@@ -78,12 +89,7 @@ from .tools_troubleshoot import (
 
 from .tools_about import about_get_state, about_rename_pc
 
-from .tools_network import (
-    network_get_state,
-    network_toggle_wifi,
-    network_toggle_airplane_mode,
-    network_list_wifi_networks,
-)
+
 
 
 
@@ -187,6 +193,13 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "about.rename_pc": about_rename_pc,
 
     "network.list_wifi_networks": network_list_wifi_networks,
+
+    "network.list_wifi_networks": network_list_wifi_networks,
+    "network.get_data_usage_total": network_get_data_usage_total,
+    "network.get_data_usage_current_wifi": network_get_data_usage_current_wifi,
+    "network.get_connection_properties": network_get_connection_properties,
+    "network.hotspot_status": network_hotspot_status,
+    "network.hotspot_toggle": network_hotspot_toggle,
 
 
 

@@ -780,6 +780,39 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("network.list_wifi_networks", {"include_bssids": True, "max_networks": 50})
         return
 
+    if normalized in ("scan wifi", "wifi networks", "list wifi", "list wifi networks", "nearby wifi"):
+        _run_tool("network.list_wifi_networks", {"include_bssids": False, "max_networks": 30})
+        return
+
+    if normalized in ("scan wifi detailed", "wifi scan detailed"):
+        _run_tool("network.list_wifi_networks", {"include_bssids": True, "max_networks": 50})
+        return
+
+    if normalized in ("data usage", "network usage"):
+        _run_tool("network.get_data_usage_total", {"include_down_adapters": False})
+        return
+
+    if normalized in ("wifi usage",):
+        _run_tool("network.get_data_usage_current_wifi", {})
+        return
+
+    if normalized in ("connection properties", "network properties", "network details"):
+        _run_tool("network.get_connection_properties", {})
+        return
+
+    if normalized in ("hotspot status", "mobile hotspot status"):
+        _run_tool("network.hotspot_status", {})
+        return
+
+    if normalized in ("hotspot on", "mobile hotspot on"):
+        _run_tool("network.hotspot_toggle", {"enabled": True})
+        return
+
+    if normalized in ("hotspot off", "mobile hotspot off"):
+        _run_tool("network.hotspot_toggle", {"enabled": False})
+        return
+
+
 
     # -------------------------
     # Nearby sharing (MK2)
