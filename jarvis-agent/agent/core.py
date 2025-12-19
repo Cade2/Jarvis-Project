@@ -115,6 +115,10 @@ KNOWN_COMMANDS = set(ALIASES.keys()) | {
     "storage categories", "storage breakdown", "storage usage",
     "cleanup recommendations", "storage cleanup", "cleanup storage",
 
+    "storage categories deep", "storage breakdown deep", "storage usage deep",
+    "cleanup recommendations deep", "storage cleanup deep", "cleanup storage deep",
+
+
 }
 
 
@@ -405,13 +409,24 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("system.get_storage", {})
         return
     
+    # Storage: categories
     if normalized in ("storage categories", "storage breakdown", "storage usage"):
         _run_tool("storage.get_categories", {})
         return
 
+    if normalized in ("storage categories deep", "storage breakdown deep", "storage usage deep"):
+        _run_tool("storage.get_categories", {"deadline_seconds": 20.0, "max_entries": 300000, "max_depth": 12})
+        return
+
+    # Storage: cleanup recommendations
     if normalized in ("cleanup recommendations", "storage cleanup", "cleanup storage"):
         _run_tool("storage.cleanup_recommendations", {})
         return
+
+    if normalized in ("cleanup recommendations deep", "storage cleanup deep", "cleanup storage deep"):
+        _run_tool("storage.cleanup_recommendations", {"deadline_seconds": 15.0})
+        return
+
 
 
     if normalized in ("list installed apps", "installed apps", "apps list"):

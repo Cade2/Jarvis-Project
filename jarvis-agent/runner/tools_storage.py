@@ -154,7 +154,7 @@ def storage_get_categories(params: Dict[str, Any]) -> Dict[str, Any]:
     # Limits to avoid hanging
     deadline_seconds = float(params.get("deadline_seconds", 8.0))
     max_entries = int(params.get("max_entries", 120000))
-    max_depth = int(params.get("max_depth", 8))
+    max_depth = int(params.get("max_depth", 10))
     deadline = time.time() + deadline_seconds
 
     # Drive usage

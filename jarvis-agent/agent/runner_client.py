@@ -19,6 +19,6 @@ class RunnerClient:
         payload: Dict[str, Any] = {"params": params or {}}
         if approval_token:
             payload["approval_token"] = approval_token
-        r = requests.post(f"{self.base_url}/tool/{tool_name}", json=payload, timeout=15)
+        r = requests.post(f"{self.base_url}/tool/{tool_name}", json=payload, timeout=60)
         r.raise_for_status()
         return r.json()
