@@ -4,6 +4,7 @@ import json
 import os
 import subprocess
 import time
+import re
 
 
 def _run_powershell(script: str) -> Tuple[int, str, str]:
@@ -210,3 +211,202 @@ def network_toggle_airplane_mode(params: Dict[str, Any]) -> Dict[str, Any]:
             "note": "Direct airplane-mode toggling will be added later via a dedicated Windows API or UIA (gated by policy).",
         }
     }
+
+# -------------------------
+# Wi-Fi scan (read-only)
+# -------------------------
+
+_RE_PROFILE = re.compile(r"^\s*All\s+User\s+Profile\s*:\s*(.+?)\s*$", re.I)
+_RE_SSID = re.compile(r"^\s*SSID\s+(\d+)\s*:\s*(.*)$", re.I)
+_RE_BSSID = re.compile(r"^\s*BSSID\s+(\d+)\s*:\s*(.+?)\s*$", re.I)
+
+
+def _netsh_wifi_profiles() -> List[str]:
+    """Return saved Wi-Fi profile names (SSIDs) via `netsh wlan show profiles`."""
+    if os.name != "nt":
+        return []
+
+    p = subprocess.run(
+        ["netsh", "wlan", "show", "profiles"],
+        capture_output=True,
+        text=True,
+        shell=False,
+    )
+    text_out = p.stdout or ""
+    profiles: List[str] = []
+    for ln in text_out.splitlines():
+        m = _RE_PROFILE.match(ln)
+        if m:
+            profiles.append(m.group(1).strip())
+    return profiles
+
+
+def _parse_signal_percent(s: str) -> Optional[int]:
+    if not s:
+        return None
+    m = re.search(r"(\d{1,3})\s*%", s)
+    if not m:
+        return None
+    try:
+        v = int(m.group(1))
+        return max(0, min(100, v))
+    except Exception:
+        return None
+
+
+def _netsh_wifi_networks(mode_bssid: bool = True) -> List[Dict[str, Any]]:
+    """Parse `netsh wlan show networks` output into structured data."""
+    if os.name != "nt":
+        return []
+
+    args = ["netsh", "wlan", "show", "networks"]
+    if mode_bssid:
+        args += ["mode=bssid"]
+
+    p = subprocess.run(args, capture_output=True, text=True, shell=False)
+    out = p.stdout or ""
+
+    networks: List[Dict[str, Any]] = []
+    current: Optional[Dict[str, Any]] = None
+    current_bssid: Optional[Dict[str, Any]] = None
+
+    for raw in out.splitlines():
+        line = raw.rstrip("\n")
+
+        m_ssid = _RE_SSID.match(line)
+        if m_ssid:
+            if current:
+                networks.append(current)
+            ssid_val = (m_ssid.group(2) or "").strip()
+            current = {
+                "ssid": ssid_val,
+                "bssids": [],
+            }
+            current_bssid = None
+            continue
+
+        if current is None:
+            continue
+
+        m_b = _RE_BSSID.match(line)
+        if m_b:
+            current_bssid = {"bssid": m_b.group(2).strip()}
+            current["bssids"].append(current_bssid)
+            continue
+
+        if ":" not in line:
+            continue
+
+        k, v = line.split(":", 1)
+        key = k.strip().lower()
+        val = v.strip()
+
+        # Network-level fields
+        if key == "network type":
+            current["network_type"] = val
+            continue
+        if key == "authentication":
+            current["authentication"] = val
+            continue
+        if key == "encryption":
+            current["encryption"] = val
+            continue
+
+        # BSSID-level fields (when present)
+        if current_bssid is not None:
+            if key == "signal":
+                current_bssid["signal"] = val
+                current_bssid["signal_percent"] = _parse_signal_percent(val)
+                continue
+            if key == "radio type":
+                current_bssid["radio_type"] = val
+                continue
+            if key == "channel":
+                try:
+                    current_bssid["channel"] = int(re.sub(r"[^0-9]", "", val) or "0")
+                except Exception:
+                    current_bssid["channel"] = val
+                continue
+
+        # Fallback signal (some systems report a top-level signal)
+        if key == "signal" and "signal" not in current:
+            current["signal"] = val
+            current["signal_percent"] = _parse_signal_percent(val)
+
+    if current:
+        networks.append(current)
+
+    return networks
+
+
+def network_list_wifi_networks(params: Dict[str, Any]) -> Dict[str, Any]:
+    """List nearby Wi-Fi SSIDs and mark which ones are already saved on this PC.
+
+    params:
+      - include_bssids: bool (default False)  # include per-BSSID details (channel, radio_type, signal)
+      - max_networks: int (default 30)        # cap returned networks after sorting by signal
+
+    Security note:
+      - This tool is read-only and **does not return Wi-Fi passwords**.
+    """
+    if os.name != "nt":
+        return {"error": "network.list_wifi_networks is only implemented on Windows right now."}
+
+    include_bssids = bool(params.get("include_bssids", False))
+    max_networks = int(params.get("max_networks", 30))
+    max_networks = max(1, min(200, max_networks))
+
+    saved = _netsh_wifi_profiles()
+    saved_set = set(saved)
+
+    networks = _netsh_wifi_networks(mode_bssid=True)
+
+    # compute a single "best" signal per SSID from BSSIDs
+    for n in networks:
+        best = None
+        for b in n.get("bssids", []) or []:
+            sp = b.get("signal_percent")
+            if isinstance(sp, int):
+                best = sp if best is None else max(best, sp)
+
+        if best is not None:
+            n["best_signal_percent"] = best
+        elif isinstance(n.get("signal_percent"), int):
+            n["best_signal_percent"] = n["signal_percent"]
+        else:
+            n["best_signal_percent"] = None
+
+        ssid = (n.get("ssid") or "").strip()
+        n["known"] = bool(ssid and ssid in saved_set)
+
+        if not include_bssids:
+            # keep output compact
+            n.pop("bssids", None)
+
+    # sort by signal desc, then ssid
+    def _sort_key(n: Dict[str, Any]):
+        s = n.get("best_signal_percent")
+        s_val = s if isinstance(s, int) else -1
+        return (-s_val, (n.get("ssid") or "").lower())
+
+    networks.sort(key=_sort_key)
+    networks = networks[:max_networks]
+
+    known_count = sum(1 for n in networks if n.get("known"))
+    unknown_count = len(networks) - known_count
+
+    state = _netsh_wifi_details()
+
+    return {
+        "result": {
+            "connected_ssid": state.get("ssid"),
+            "wifi_state": state.get("state"),
+            "saved_profiles_count": len(saved),
+            "returned_networks": len(networks),
+            "known_count": known_count,
+            "unknown_count": unknown_count,
+            "networks": networks,
+            "note": "Passwords are not returned. Known=true means a saved Wi-Fi profile exists on this PC.",
+        }
+    }
+

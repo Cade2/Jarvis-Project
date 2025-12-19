@@ -48,6 +48,16 @@ ALIASES = {
     "disable wifi": "wifi off",
     "turn off wifi": "wifi off",
 
+    "wifi scan": "scan wifi",
+    "scan wifi": "scan wifi",
+    "nearby wifi": "scan wifi",
+    "wifi networks": "scan wifi",
+    "list wifi": "scan wifi",
+    "list wifi networks": "scan wifi",
+    "scan wifi detailed": "scan wifi detailed",
+    "wifi scan detailed": "scan wifi detailed",
+
+
     # settings
     "settings wifi": "open settings wifi",
     "settings bluetooth": "open settings bluetooth",
@@ -397,7 +407,7 @@ def handle_user_message(user_message: str) -> None:
         print("  • System        → system info | storage | installed apps")
         print("  • Apps          → open <app> | close <app>")
         print("  • Settings      → open settings <topic> | settings <topic>")
-        print("  • Network       → network status | wifi on | wifi off | airplane mode")
+        print("  • Network       → network status | scan wifi | wifi on | wifi off | airplane mode")
         print("  • Display       → display state | brightness <0-100> | brightness up/down")
         print("                 → list displays | resolution 1920x1080 | refresh rate 60")
         print("                 → rotate portrait | orientation landscape | scale 125")
@@ -762,6 +772,15 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("settings.open", {"target": "airplane mode"})
         return
     
+    if normalized in ("scan wifi", "list wifi networks", "wifi networks", "nearby wifi"):
+        _run_tool("network.list_wifi_networks", {"include_bssids": False, "max_networks": 30})
+        return
+
+    if normalized in ("scan wifi detailed",):
+        _run_tool("network.list_wifi_networks", {"include_bssids": True, "max_networks": 50})
+        return
+
+
     # -------------------------
     # Nearby sharing (MK2)
     # -------------------------

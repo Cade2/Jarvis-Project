@@ -650,10 +650,10 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
     ),
     "about.get_state": Tool(
-    name="about.get_state",
-    description="Get About info for this PC (CPU/RAM/GPU/Windows version, etc).",
-    func=_runner_tool("about.get_state"),
-    risk=RiskLevel.LOW,
+        name="about.get_state",
+        description="Get About info for this PC (CPU/RAM/GPU/Windows version, etc).",
+        func=_runner_tool("about.get_state"),
+        risk=RiskLevel.LOW,
     ),
     "about.rename_pc": Tool(
         name="about.rename_pc",
@@ -661,6 +661,13 @@ TOOLS.update({
         func=_runner_tool("about.rename_pc"),
         risk=RiskLevel.HIGH,
     ),
+    "network.list_wifi_networks": Tool(
+        name="network.list_wifi_networks",
+        description="Scan nearby Wi-Fi networks and mark which ones are already saved on this PC.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("network.list_wifi_networks"),
+    ),
+
 
 
 

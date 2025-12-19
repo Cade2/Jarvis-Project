@@ -28,6 +28,7 @@ allowed_domains:
   - network.get_state
   - network.toggle_wifi
   - network.toggle_airplane_mode
+  - network.list_wifi_networks
   - display.get_state
   - display.set_brightness
   - display.list_displays

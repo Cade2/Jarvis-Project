@@ -78,6 +78,13 @@ from .tools_troubleshoot import (
 
 from .tools_about import about_get_state, about_rename_pc
 
+from .tools_network import (
+    network_get_state,
+    network_toggle_wifi,
+    network_toggle_airplane_mode,
+    network_list_wifi_networks,
+)
+
 
 
 
@@ -178,6 +185,9 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
 
     "about.get_state": about_get_state,
     "about.rename_pc": about_rename_pc,
+
+    "network.list_wifi_networks": network_list_wifi_networks,
+
 
 
 
