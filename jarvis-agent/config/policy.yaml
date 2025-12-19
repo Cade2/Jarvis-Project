@@ -48,6 +48,7 @@ allowed_domains:
   - power.set_scheme
   - power.get_mode
   - power.set_mode
+  - power.srum_report
 
 
 

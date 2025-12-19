@@ -222,6 +222,7 @@ TOOLS: Dict[str, Tool] = {
         risk=RiskLevel.MEDIUM,  # a bit more dangerous
         func=clear_reminders,
     ),
+    
 }
 
 # ---- Runner-backed tools (MK2) ----
@@ -528,6 +529,27 @@ TOOLS.update({
         risk=RiskLevel.LOW,
         func=_runner_tool("power.open_battery_usage"),
     ),
+    "power.srum_report": Tool(
+        name="power.srum_report",
+        description="Generate a Windows SRUM report (per-app usage data). Returns path to CSV/XML.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.srum_report"),
+    ),
+    "storage.get_categories": Tool(
+    name="storage.get_categories",
+    description="Estimate storage usage by category (Downloads, Apps, Temp, Recycle Bin, etc.).",
+    risk=RiskLevel.READ_ONLY,
+    func=_runner_tool("storage.get_categories"),
+    ),
+    "storage.cleanup_recommendations": Tool(
+        name="storage.cleanup_recommendations",
+        description="Show cleanup recommendations (read-only) + largest Downloads files.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("storage.cleanup_recommendations"),
+    ),
+
+
+
 
 
 

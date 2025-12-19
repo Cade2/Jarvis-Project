@@ -59,6 +59,12 @@ ALIASES = {
     "paired devices": "list paired devices",
     "bluetooth paired devices": "list paired devices",
     "list bluetooth devices": "list paired devices",
+
+    # power/battery shortcuts
+    "power timeouts": "power get timeouts",
+    "timeouts": "power get timeouts",
+    "battery usage per app": "srum report",
+    "per app battery usage": "srum report",
 }
 
 
@@ -98,6 +104,17 @@ KNOWN_COMMANDS = set(ALIASES.keys()) | {
     "list reminders", "show reminders", "show my reminders",
     "show activity", "show audit log", "show log",
     "clear reminders", "delete all reminders", "remove all reminders",
+
+    "power get timeouts", "power timeouts",
+    "hibernate status", "hibernate on", "hibernate off",
+    "energy saver status", "energy saver on", "energy saver off",
+    "set energy saver threshold",
+    "battery usage", "open battery usage", "battery report",
+    "srum report",
+
+    "storage categories", "storage breakdown", "storage usage",
+    "cleanup recommendations", "storage cleanup", "cleanup storage",
+
 }
 
 
@@ -232,6 +249,15 @@ def _tools_for_message(lower: str) -> Dict[str, Tool]:
     if any(w in lower for w in ("open", "close", "app")):
         add("apps.")
 
+    # Power
+    if any(w in lower for w in ("power", "battery", "hibernate", "timeout", "energy saver", "battery saver", "srum")):
+        add("power.")
+
+    # Storage
+    if any(w in lower for w in ("storage", "disk", "drive", "cleanup", "recycle bin", "downloads", "temp")):
+        add("storage.")
+
+
     # If we still ended up with too many, keep it small:
     # (display tools can be many; but still manageable)
     return wanted
@@ -298,6 +324,7 @@ def _detect_apply_to(text_lower: str) -> str:
         return "dc"
     return "both"
 
+
 def _parse_minutes(text_lower: str) -> int | None:
     # supports: "5 minutes", "1 minute", "2 hours", "1 hour"
     m = re.search(r"(\d+)\s*(minute|minutes|hour|hours)", text_lower)
@@ -306,6 +333,20 @@ def _parse_minutes(text_lower: str) -> int | None:
     n = int(m.group(1))
     unit = m.group(2)
     return n * 60 if "hour" in unit else n
+
+
+def _apply_to_from_text(t: str) -> str:
+    t = t.lower()
+    if "on battery" in t or "battery" in t or "dc" in t:
+        return "dc"
+    if "plugged" in t or "plugged in" in t or "charger" in t or "ac" in t:
+        return "ac"
+    return "both"
+
+
+def _extract_int(t: str) -> int | None:
+    m = re.search(r"(\d+)", t)
+    return int(m.group(1)) if m else None
 
 
 def handle_user_message(user_message: str) -> None:
@@ -363,6 +404,15 @@ def handle_user_message(user_message: str) -> None:
     if normalized in ("storage", "disk space", "drive space"):
         _run_tool("system.get_storage", {})
         return
+    
+    if normalized in ("storage categories", "storage breakdown", "storage usage"):
+        _run_tool("storage.get_categories", {})
+        return
+
+    if normalized in ("cleanup recommendations", "storage cleanup", "cleanup storage"):
+        _run_tool("storage.cleanup_recommendations", {})
+        return
+
 
     if normalized in ("list installed apps", "installed apps", "apps list"):
         _run_tool("apps.list_installed", {})
@@ -378,7 +428,7 @@ def handle_user_message(user_message: str) -> None:
         target = raw.strip()[len("settings "):].strip()
         _run_tool("settings.open", {"target": target or "system"})
         return
-    
+
     # Power
     if normalized in ("power status", "battery status", "power state", "power plan"):
         _run_tool("power.get_state", {})
@@ -393,7 +443,7 @@ def handle_user_message(user_message: str) -> None:
         plan = m.group(1).strip()
         _run_tool("power.set_scheme", {"name": plan})
         return
-    
+
     if normalized in ("power mode", "power mode status", "power mode state"):
         _run_tool("power.get_mode", {})
         return
@@ -403,10 +453,112 @@ def handle_user_message(user_message: str) -> None:
         mode = m.group(1).strip()
         _run_tool("power.set_mode", {"mode": mode, "apply_to": "both"})
         return
-    
-        # -------------------------
+
+    # -------------------------
     # Power: timeouts + hibernate + energy saver + battery usage
     # -------------------------
+
+    # Hour-safe handling (prevents the generic minutes-regex below from mis-reading "1 hour" as "1")
+    # e.g. "set sleep timeout to 1 hour on battery"
+    if "timeout" in text_lower and ("hour" in text_lower or "hours" in text_lower) and "set" in text_lower:
+        m = re.search(r"set\s+(screen|sleep|hibernate)\s+timeout\s+to\s+(\d+)\s*(hour|hours)", text_lower)
+        if m:
+            kind = m.group(1)
+            hours = int(m.group(2))
+            apply_to = _apply_to_from_text(text_lower)
+            tool_map = {
+                "screen": "power.set_screen_timeout",
+                "sleep": "power.set_sleep_timeout",
+                "hibernate": "power.set_hibernate_timeout",
+            }
+            _run_tool(tool_map[kind], {"minutes": hours * 60, "apply_to": apply_to})
+            return
+
+    # -------------------------
+    # Power: timeouts / hibernate / energy saver / battery
+    # -------------------------
+
+    if normalized in ("power get timeouts", "power timeouts"):
+        _run_tool("power.get_timeouts", {})
+        return
+
+    # Set timeouts:
+    # "set screen timeout to 10 minutes on battery"
+    # "set sleep timeout to 15 minutes plugged in"
+    # "set hibernate timeout to 60 minutes"
+    m = re.search(r"set\s+(screen|sleep|hibernate)\s+timeout\s+to\s+(\d+)\s*(?:minutes|mins|min)?", text_lower)
+    if m:
+        kind = m.group(1)
+        minutes = int(m.group(2))
+        apply_to = _apply_to_from_text(text_lower)
+
+        tool_map = {
+            "screen": "power.set_screen_timeout",
+            "sleep": "power.set_sleep_timeout",
+            "hibernate": "power.set_hibernate_timeout",
+        }
+        _run_tool(tool_map[kind], {"minutes": minutes, "apply_to": apply_to})
+        return
+
+    # Hibernate
+    if normalized in ("hibernate status", "power hibernate status"):
+        _run_tool("power.hibernate_status", {})
+        return
+
+    if normalized in ("hibernate on", "enable hibernate"):
+        _run_tool("power.hibernate_on", {})
+        return
+
+    if normalized in ("hibernate off", "disable hibernate"):
+        _run_tool("power.hibernate_off", {})
+        return
+
+    # Energy saver
+    if normalized in ("energy saver status", "battery saver status"):
+        _run_tool("power.energy_saver_status", {})
+        return
+
+    if normalized in ("energy saver on", "battery saver on"):
+        _run_tool("power.energy_saver_on", {"apply_to": _apply_to_from_text(text_lower)})
+        return
+
+    if normalized in ("energy saver off", "battery saver off"):
+        _run_tool("power.energy_saver_off", {"apply_to": _apply_to_from_text(text_lower)})
+        return
+
+    # "set energy saver threshold to 30"
+    if "energy saver threshold" in text_lower or "battery saver threshold" in text_lower:
+        percent = _extract_int(text_lower)
+        if percent is None:
+            print("Jarvis: Please include a percent, e.g. 'set energy saver threshold to 30'.")
+            return
+        _run_tool("power.energy_saver_threshold", {"percent": percent, "apply_to": _apply_to_from_text(text_lower)})
+        return
+
+    # Battery usage settings page
+    if normalized in ("battery usage", "open battery usage"):
+        _run_tool("power.open_battery_usage", {})
+        return
+
+    # Battery report:
+    # "battery report" (defaults)
+    # "battery report 7 days"
+    if text_lower.startswith("battery report"):
+        days = _extract_int(text_lower) or 7
+        _run_tool("power.battery_report", {"days": days})
+        return
+
+    # Per-app usage (SRUM) report
+    # "srum report" | "srum report csv" | "srum report xml"
+    if text_lower.startswith("srum report"):
+        fmt = "csv"
+        if "xml" in text_lower:
+            fmt = "xml"
+        _run_tool("power.srum_report", {"format": fmt})
+        return
+
+    # (existing power timeout block kept below, unchanged)
+
     if normalized in ("power timeouts", "timeouts", "sleep settings", "power timeout status"):
         _run_tool("power.get_timeouts", {})
         return
@@ -483,9 +635,6 @@ def handle_user_message(user_message: str) -> None:
             days = int(m.group(1))
         _run_tool("power.battery_report", {"days": days})
         return
-
-    
-
 
     # Network
     if normalized in ("network status", "network state", "wifi status", "wifi state"):

@@ -44,7 +44,8 @@ from runner.tools_power_timeouts import (
     power_open_battery_usage,
 )
 
-
+from runner.tools_power_usage import power_srum_report
+from .tools_storage import storage_get_categories, storage_cleanup_recommendations
 
 
 
@@ -116,7 +117,13 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "power.battery_report": power_battery_report,
     "power.open_battery_usage": power_open_battery_usage,
 
+    "power.srum_report": power_srum_report,
     
+    "storage.get_categories": storage_get_categories,
+    "storage.cleanup_recommendations": storage_cleanup_recommendations,
+
+    
+
 
 
 }
@@ -131,3 +138,4 @@ def capabilities() -> Dict[str, Any]:
 
 def run_tool(name: str, params: Dict[str, Any]) -> Dict[str, Any]:
     return TOOL_FUNCS[name](params)
+

@@ -70,13 +70,44 @@ def _seconds_from_minutes(minutes: int) -> int:
 def _powercfg_query(setting_alias_group: str, setting_alias: str) -> Dict[str, Any]:
     """
     powercfg /query SCHEME_CURRENT <GROUP> <SETTING>
+    Fallback: powercfg /qh SCHEME_CURRENT <GROUP> <SETTING> (more verbose, often includes AC/DC indexes)
+    Returns:
+      {"ok": True, "ac": int|None, "dc": int|None, "raw": str, "source": "query"|"qh"}
+      or {"ok": False, "error": str, "raw": str, ...}
     """
     res = _run_cmd(["powercfg", "/query", "SCHEME_CURRENT", setting_alias_group, setting_alias])
     if not res["ok"]:
-        return {"ok": False, "error": res["stderr"] or f"powercfg failed (code {res['code']})", "raw": res["stdout"]}
+        return {
+            "ok": False,
+            "error": res["stderr"] or f"powercfg failed (code {res['code']})",
+            "raw": res["stdout"],
+        }
 
     ac, dc = _parse_powercfg_indexes(res["stdout"])
-    return {"ok": True, "ac": ac, "dc": dc, "raw": res["stdout"]}
+    if ac is None and dc is None:
+        # Fallback to /qh (this is what fixed EPP for you)
+        qh = _run_cmd(["powercfg", "/qh", "SCHEME_CURRENT", setting_alias_group, setting_alias])
+        if qh["ok"]:
+            ac2, dc2 = _parse_powercfg_indexes(qh["stdout"])
+            if ac2 is not None or dc2 is not None:
+                return {"ok": True, "ac": ac2, "dc": dc2, "raw": qh["stdout"], "source": "qh"}
+
+            return {
+                "ok": False,
+                "error": "Could not parse AC/DC indexes from powercfg /qh output for this setting",
+                "raw": qh["stdout"],
+                "source": "qh",
+            }
+
+        return {
+            "ok": False,
+            "error": "powercfg output did not include AC/DC indexes for this setting (and /qh fallback failed)",
+            "raw": res["stdout"],
+            "qh_error": qh["stderr"] or f"powercfg /qh failed (code {qh['code']})",
+        }
+
+    return {"ok": True, "ac": ac, "dc": dc, "raw": res["stdout"], "source": "query"}
+
 
 
 # -------------------------
