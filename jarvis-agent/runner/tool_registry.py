@@ -28,6 +28,23 @@ from .tools_audio import audio_get_state, audio_set_volume, audio_set_mute
 from .tools_power import power_get_state, power_list_schemes, power_set_scheme
 from .tools_power import power_get_mode, power_set_mode
 
+from runner.tools_power_timeouts import (
+    power_get_timeouts,
+    power_set_sleep_timeout,
+    power_set_screen_timeout,
+    power_set_hibernate_timeout,
+    power_hibernate_status,
+    power_hibernate_on,
+    power_hibernate_off,
+    power_energy_saver_status,
+    power_energy_saver_on,
+    power_energy_saver_off,
+    power_energy_saver_threshold,
+    power_battery_report,
+    power_open_battery_usage,
+)
+
+
 
 
 
@@ -80,6 +97,26 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
 
     "power.get_mode": power_get_mode,
     "power.set_mode": power_set_mode,
+
+    # ----- Power timeouts / energy saver / battery usage (MK2) -----
+    "power.get_timeouts": power_get_timeouts,
+    "power.set_sleep_timeout": power_set_sleep_timeout,
+    "power.set_screen_timeout": power_set_screen_timeout,
+    "power.set_hibernate_timeout": power_set_hibernate_timeout,
+
+    "power.hibernate_status": power_hibernate_status,
+    "power.hibernate_on": power_hibernate_on,
+    "power.hibernate_off": power_hibernate_off,
+
+    "power.energy_saver_status": power_energy_saver_status,
+    "power.energy_saver_on": power_energy_saver_on,
+    "power.energy_saver_off": power_energy_saver_off,
+    "power.energy_saver_threshold": power_energy_saver_threshold,
+
+    "power.battery_report": power_battery_report,
+    "power.open_battery_usage": power_open_battery_usage,
+
+    
 
 
 }

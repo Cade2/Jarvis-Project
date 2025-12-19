@@ -290,6 +290,24 @@ def _route_with_llm(user_text: str) -> Optional[Dict[str, Any]]:
     return {"tool": tool, "params": params}
 
 
+def _detect_apply_to(text_lower: str) -> str:
+    # AC = plugged in, DC = on battery
+    if any(k in text_lower for k in ["plugged", "plugged in", "ac "]):
+        return "ac"
+    if any(k in text_lower for k in ["on battery", "battery", "dc "]):
+        return "dc"
+    return "both"
+
+def _parse_minutes(text_lower: str) -> int | None:
+    # supports: "5 minutes", "1 minute", "2 hours", "1 hour"
+    m = re.search(r"(\d+)\s*(minute|minutes|hour|hours)", text_lower)
+    if not m:
+        return None
+    n = int(m.group(1))
+    unit = m.group(2)
+    return n * 60 if "hour" in unit else n
+
+
 def handle_user_message(user_message: str) -> None:
     global _PENDING_SUGGESTION
 
@@ -385,6 +403,87 @@ def handle_user_message(user_message: str) -> None:
         mode = m.group(1).strip()
         _run_tool("power.set_mode", {"mode": mode, "apply_to": "both"})
         return
+    
+        # -------------------------
+    # Power: timeouts + hibernate + energy saver + battery usage
+    # -------------------------
+    if normalized in ("power timeouts", "timeouts", "sleep settings", "power timeout status"):
+        _run_tool("power.get_timeouts", {})
+        return
+
+    # Set screen timeout
+    if "screen timeout" in text_lower and ("set" in text_lower or "change" in text_lower):
+        mins = _parse_minutes(text_lower)
+        if mins is None:
+            print("Jarvis: Please specify a time, e.g. 'set screen timeout to 5 minutes'.")
+            return
+        _run_tool("power.set_screen_timeout", {"minutes": mins, "apply_to": _detect_apply_to(text_lower)})
+        return
+
+    # Set sleep timeout
+    if "sleep timeout" in text_lower and ("set" in text_lower or "change" in text_lower):
+        mins = _parse_minutes(text_lower)
+        if mins is None:
+            print("Jarvis: Please specify a time, e.g. 'set sleep timeout to 10 minutes'.")
+            return
+        _run_tool("power.set_sleep_timeout", {"minutes": mins, "apply_to": _detect_apply_to(text_lower)})
+        return
+
+    # Set hibernate timeout
+    if "hibernate timeout" in text_lower and ("set" in text_lower or "change" in text_lower):
+        mins = _parse_minutes(text_lower)
+        if mins is None:
+            print("Jarvis: Please specify a time, e.g. 'set hibernate timeout to 60 minutes'.")
+            return
+        _run_tool("power.set_hibernate_timeout", {"minutes": mins, "apply_to": _detect_apply_to(text_lower)})
+        return
+
+    # Hibernate on/off
+    if normalized in ("hibernate status",):
+        _run_tool("power.hibernate_status", {})
+        return
+
+    if normalized in ("hibernate on", "turn on hibernate", "enable hibernate"):
+        _run_tool("power.hibernate_on", {})
+        return
+
+    if normalized in ("hibernate off", "turn off hibernate", "disable hibernate"):
+        _run_tool("power.hibernate_off", {})
+        return
+
+    # Energy saver
+    if normalized in ("energy saver status", "battery saver status"):
+        _run_tool("power.energy_saver_status", {})
+        return
+
+    if normalized in ("energy saver on", "battery saver on", "turn on energy saver"):
+        _run_tool("power.energy_saver_on", {"apply_to": "both"})
+        return
+
+    if normalized in ("energy saver off", "battery saver off", "turn off energy saver"):
+        _run_tool("power.energy_saver_off", {"apply_to": "both"})
+        return
+
+    m = re.search(r"(?:set\s+)?(?:energy\s+saver|battery\s+saver)\s+threshold\s+to\s+(\d{1,3})", text_lower)
+    if m:
+        pct = max(0, min(100, int(m.group(1))))
+        _run_tool("power.energy_saver_threshold", {"percent": pct, "apply_to": _detect_apply_to(text_lower)})
+        return
+
+    # Battery usage + report
+    if normalized in ("battery usage", "battery usage per app", "battery usage status"):
+        _run_tool("power.open_battery_usage", {})
+        return
+
+    if normalized.startswith("battery report"):
+        # e.g. "battery report 7 days"
+        days = 7
+        m = re.search(r"(\d+)\s*day", text_lower)
+        if m:
+            days = int(m.group(1))
+        _run_tool("power.battery_report", {"days": days})
+        return
+
     
 
 

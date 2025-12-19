@@ -447,6 +447,87 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("power.set_mode"),
     ),
+    "power.get_timeouts": Tool(
+        name="power.get_timeouts",
+        description="Get screen/sleep/hibernate timeouts (AC/DC).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.get_timeouts"),
+    ),
+    "power.set_sleep_timeout": Tool(
+        name="power.set_sleep_timeout",
+        description="Set sleep timeout in minutes (AC/DC/both).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.set_sleep_timeout"),
+    ),
+    "power.set_screen_timeout": Tool(
+        name="power.set_screen_timeout",
+        description="Set screen timeout in minutes (AC/DC/both).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.set_screen_timeout"),
+    ),
+    "power.set_hibernate_timeout": Tool(
+        name="power.set_hibernate_timeout",
+        description="Set hibernate timeout in minutes (AC/DC/both).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.set_hibernate_timeout"),
+    ),
+
+    "power.hibernate_status": Tool(
+        name="power.hibernate_status",
+        description="Check whether hibernate is enabled/available.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.hibernate_status"),
+    ),
+    "power.hibernate_on": Tool(
+        name="power.hibernate_on",
+        description="Enable hibernate.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.hibernate_on"),
+    ),
+    "power.hibernate_off": Tool(
+        name="power.hibernate_off",
+        description="Disable hibernate (removes hiberfil.sys).",
+        risk=RiskLevel.HIGH,
+        func=_runner_tool("power.hibernate_off"),
+    ),
+
+    "power.energy_saver_status": Tool(
+        name="power.energy_saver_status",
+        description="Read Energy Saver threshold (AC/DC).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.energy_saver_status"),
+    ),
+    "power.energy_saver_on": Tool(
+        name="power.energy_saver_on",
+        description="Turn Energy Saver on (sets threshold=100).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.energy_saver_on"),
+    ),
+    "power.energy_saver_off": Tool(
+        name="power.energy_saver_off",
+        description="Turn Energy Saver off (sets threshold=0).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.energy_saver_off"),
+    ),
+    "power.energy_saver_threshold": Tool(
+        name="power.energy_saver_threshold",
+        description="Set Energy Saver threshold percent (0-100) (AC/DC/both).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("power.energy_saver_threshold"),
+    ),
+
+    "power.battery_report": Tool(
+        name="power.battery_report",
+        description="Generate a battery report (HTML).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("power.battery_report"),
+    ),
+    "power.open_battery_usage": Tool(
+        name="power.open_battery_usage",
+        description="Open Windows Battery usage page.",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("power.open_battery_usage"),
+    ),
 
 
 
