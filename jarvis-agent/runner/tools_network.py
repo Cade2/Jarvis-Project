@@ -926,8 +926,8 @@ def network_hotspot_toggle(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"error": "Missing param: enabled (true/false)."}
 
     desired_bool = bool(desired)
-    wait_seconds = int(params.get("wait_seconds", 8))
-    poll_interval_ms = int(params.get("poll_interval_ms", 600))
+    wait_seconds = int(params.get("wait_seconds", 15))
+    poll_interval_ms = int(params.get("poll_interval_ms", 500))
 
     wait_seconds = max(0, min(20, wait_seconds))
     poll_interval_ms = max(200, min(2000, poll_interval_ms))
