@@ -55,6 +55,7 @@ allowed_domains:
   - power.get_mode
   - power.set_mode
   - power.srum_report
+  - bluetooth.scan_nearby
 
 
 

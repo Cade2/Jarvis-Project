@@ -14,6 +14,21 @@ def _run_powershell(script: str) -> Tuple[int, str, str]:
     )
     return p.returncode, (p.stdout or "").strip(), (p.stderr or "").strip()
 
+def _ps_json(script: str) -> Tuple[int, Any, str]:
+    code, out, err = _run_powershell(script)
+    if code != 0:
+        return code, None, err or out
+
+    if not out:
+        return 0, None, ""
+
+    try:
+        return 0, json.loads(out), ""
+    except Exception as e:
+        snippet = out[:400].replace("\n", "\\n")
+        return 0, None, f"JSON parse failed: {e}; output_snippet={snippet}"
+
+
 
 _PS_AWAIT_HELPERS = r"""
 # Load WinRT task helpers (works on most Windows 10/11 installs)
@@ -346,32 +361,328 @@ try {
 
 def bluetooth_connect_paired(params: Dict[str, Any]) -> Dict[str, Any]:
     """
-    v0: Best-effort "connect" placeholder.
+    Best-effort connect/pair for Bluetooth devices (Windows).
 
-    Real connection requires UI Automation (UIA) or deeper WinRT APIs.
-    For now we open the Bluetooth Settings page so the user can click Connect.
+    What it does:
+      - Finds device by name via DeviceInformation (Bluetooth Classic + BLE)
+      - If not paired and allow_pair=True, attempts PairAsync (may prompt UI)
+      - Attempts a "connect" by creating BluetoothLEDevice/BluetoothDevice and querying services
+      - Falls back to opening Bluetooth settings if blocked
 
     params:
-      - name: optional device name to connect
+      - name: str (required)
+      - allow_pair: bool (default True)
+      - address: optional bluetooth address like "aa:bb:cc:dd:ee:ff" (BLE shortcut)
     """
     if os.name != "nt":
         return {"error": "bluetooth.connect_paired is only implemented on Windows right now."}
 
     name = (params.get("name") or "").strip()
+    allow_pair = bool(params.get("allow_pair", True))
+    address = (params.get("address") or "").strip()
 
-    # Open Bluetooth settings page
+    if not name and not address:
+        return {"error": "Provide 'name' (e.g. AirPods) or 'address' (aa:bb:cc:dd:ee:ff)."}
+
+    # Escape for PowerShell single-quoted strings
+    name_ps = name.replace("'", "''")
+
+    # Optional address -> UInt64 conversion in PS
+    addr_ps = address.replace("'", "''")
+
+    ps = _PS_AWAIT_HELPERS + rf"""
+try {{
+  Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null
+
+  function Await-Generic($op) {{
+    if($null -eq $op) {{ return $null }}
+    $ext = [System.WindowsRuntimeSystemExtensions]
+    $m = $ext.GetMethods() | Where-Object {{
+      $_.Name -eq "AsTask" -and $_.IsGenericMethod -and $_.GetParameters().Count -eq 1
+    }} | Select-Object -First 1
+    if($null -eq $m) {{ throw "Generic AsTask<T> not found" }}
+    $tArg = $op.GetType().GenericTypeArguments | Select-Object -First 1
+    $gm = $m.MakeGenericMethod($tArg)
+    $task = $gm.Invoke($null, @($op))
+    $task.Wait()
+    return $task.Result
+  }}
+
+  $null = [Windows.Devices.Enumeration.DeviceInformation, Windows.Devices.Enumeration, ContentType=WindowsRuntime]
+  $null = [Windows.Devices.Bluetooth.BluetoothLEDevice, Windows.Devices.Bluetooth, ContentType=WindowsRuntime]
+  $null = [Windows.Devices.Bluetooth.BluetoothDevice, Windows.Devices.Bluetooth, ContentType=WindowsRuntime]
+
+  function AddrToUlong([string]$mac) {{
+    if([string]::IsNullOrWhiteSpace($mac)) {{ return $null }}
+    $hex = ($mac -replace "[:\-]","").ToUpper()
+    if($hex.Length -ne 12) {{ return $null }}
+    return [Convert]::ToUInt64($hex, 16)
+  }}
+
+  # If address is provided, try BLE direct connect first
+  $addrStr = '{addr_ps}'
+  if(-not [string]::IsNullOrWhiteSpace($addrStr)) {{
+    $u = AddrToUlong $addrStr
+    if($u -ne $null) {{
+      try {{
+        $ble = Await-Generic ([Windows.Devices.Bluetooth.BluetoothLEDevice]::FromBluetoothAddressAsync($u))
+        if($ble) {{
+          $gatt = Await-Generic ($ble.GetGattServicesAsync())
+          @{{ supported=$true; mode="address"; address=$addrStr; ble_gatt_status=$gatt.Status.ToString(); note="Address connect is BLE-only." }} | ConvertTo-Json -Depth 8 -Compress
+          exit 0
+        }}
+      }} catch {{
+        @{{ supported=$false; mode="address"; address=$addrStr; error=$_.Exception.Message }} | ConvertTo-Json -Depth 8 -Compress
+        exit 0
+      }}
+    }}
+  }}
+
+  $target = '{name_ps}'.ToLower()
+  $btClassic = "{{e0cbf06c-cd8b-4647-bb8a-263b43f0f974}}"
+  $btLe = "{{bb7bb05e-5972-42b5-94fc-76eaa7084d49}}"
+
+  # AQS selector for both classic + LE Association Endpoints
+  $aqs = "(System.Devices.Aep.ProtocolId:=""$btClassic"") OR (System.Devices.Aep.ProtocolId:=""$btLe"")"
+
+  $props = @(
+    "System.ItemNameDisplay",
+    "System.Devices.Aep.IsPaired",
+    "System.Devices.Aep.IsConnected",
+    "System.Devices.Aep.DeviceAddress",
+    "System.Devices.Aep.ProtocolId"
+  )
+
+  $devs = Await-Generic ([Windows.Devices.Enumeration.DeviceInformation]::FindAllAsync($aqs, $props))
+  $matches = @($devs | Where-Object {{ $_.Name -and $_.Name.ToLower().Contains($target) }})
+
+  if($matches.Count -eq 0) {{
+    @{{ supported=$true; matched_count=0; note="No device matched by name. Ensure device is on and discoverable (pairing mode)."; action="open_settings"; uri="ms-settings:bluetooth" }} | ConvertTo-Json -Depth 8 -Compress
+    exit 0
+  }}
+
+  # Choose best match: exact name > paired > first
+  $sel = $matches | Where-Object {{ $_.Name.ToLower() -eq $target }} | Select-Object -First 1
+  if(-not $sel) {{
+    $sel = $matches | Where-Object {{ $_.Pairing.IsPaired }} | Select-Object -First 1
+  }}
+  if(-not $sel) {{ $sel = $matches | Select-Object -First 1 }}
+
+  $pair_status = $null
+  $paired_before = [bool]$sel.Pairing.IsPaired
+
+  if((-not $paired_before) -and {str(allow_pair).lower()}) {{
+    try {{
+      $pairRes = Await-Generic ($sel.Pairing.PairAsync())
+      $pair_status = $pairRes.Status.ToString()
+    }} catch {{
+      $pair_status = "PairAsyncFailed: " + $_.Exception.Message
+    }}
+  }}
+
+  $paired_after = [bool]$sel.Pairing.IsPaired
+  $is_connected_prop = $sel.Properties["System.Devices.Aep.IsConnected"]
+
+  # Try BLE connect (GATT)
+  $ble_gatt_status = $null
+  $ble_error = $null
+  try {{
+    $ble = Await-Generic ([Windows.Devices.Bluetooth.BluetoothLEDevice]::FromIdAsync($sel.Id))
+    if($ble) {{
+      $gatt = Await-Generic ($ble.GetGattServicesAsync())
+      $ble_gatt_status = $gatt.Status.ToString()
+    }}
+  }} catch {{
+    $ble_error = $_.Exception.Message
+  }}
+
+  # Try Classic connect (RFCOMM services)
+  $rfcomm_status = $null
+  $classic_error = $null
+  try {{
+    $bt = Await-Generic ([Windows.Devices.Bluetooth.BluetoothDevice]::FromIdAsync($sel.Id))
+    if($bt) {{
+      $rf = Await-Generic ($bt.GetRfcommServicesAsync())
+      $rfcomm_status = $rf.Status.ToString()
+    }}
+  }} catch {{
+    $classic_error = $_.Exception.Message
+  }}
+
+  @{{ 
+    supported=$true
+    matched_count=$matches.Count
+    selected_name=$sel.Name
+    paired_before=$paired_before
+    paired_after=$paired_after
+    pair_status=$pair_status
+    is_connected_property=$is_connected_prop
+    ble_gatt_status=$ble_gatt_status
+    ble_error=$ble_error
+    rfcomm_status=$rfcomm_status
+    classic_error=$classic_error
+    note="Best-effort: audio devices may only 'connect' when an app starts audio. If needed, use Settings fallback."
+  }} | ConvertTo-Json -Depth 10 -Compress
+
+}} catch {{
+  @{{ supported=$false; error=$_.Exception.Message; action="open_settings"; uri="ms-settings:bluetooth" }} | ConvertTo-Json -Depth 8 -Compress
+}}
+"""
+
     try:
-        subprocess.Popen(["cmd", "/c", "start", "", "ms-settings:bluetooth"], shell=False)
+        code, out, err = _run_powershell(ps)
+        if code != 0:
+            raise RuntimeError(err or out or f"PowerShell exited with {code}")
+
+        if not out:
+            # Fallback to settings
+            subprocess.Popen(["cmd", "/c", "start", "", "ms-settings:bluetooth"], shell=False)
+            return {"result": {"supported": False, "action": "open_settings", "uri": "ms-settings:bluetooth", "note": "No output from WinRT connect attempt."}}
+
+        try:
+            obj = json.loads(out)
+        except Exception:
+            obj = {"supported": False, "error": "Failed to parse PowerShell JSON", "raw": out[:400]}
+
+        # If tool recommends settings, open it automatically
+        if isinstance(obj, dict) and obj.get("action") == "open_settings":
+            try:
+                subprocess.Popen(["cmd", "/c", "start", "", "ms-settings:bluetooth"], shell=False)
+            except Exception:
+                pass
+
+        return {"result": obj}
+
+    except Exception as e:
+        # Last resort: open settings
+        try:
+            subprocess.Popen(["cmd", "/c", "start", "", "ms-settings:bluetooth"], shell=False)
+        except Exception:
+            pass
+        return {"result": {"supported": False, "error": str(e), "action": "open_settings", "uri": "ms-settings:bluetooth", "requested_device": name or None}}
+
+
+def _ble_scan_ps(duration_ms: int, active: bool) -> str:
+    mode = "Active" if active else "Passive"
+    return _PS_AWAIT_HELPERS + rf"""
+try {{
+  $null = [Windows.Devices.Bluetooth.Advertisement.BluetoothLEAdvertisementWatcher, Windows.Devices.Bluetooth, ContentType=WindowsRuntime]
+  $null = [Windows.Devices.Bluetooth.Advertisement.BluetoothLEScanningMode, Windows.Devices.Bluetooth, ContentType=WindowsRuntime]
+  $null = [Windows.Foundation.TypedEventHandler`2, Windows.Foundation, ContentType=WindowsRuntime]
+
+  function Format-BTAddress([UInt64]$addr) {{
+    $hex = "{{0:X12}}" -f $addr
+    return ($hex -replace '(.{{2}})(?!$)','$1:').ToLower()
+  }}
+
+  $script:seen = @{{}}  # address -> object
+
+  $watcher = [Windows.Devices.Bluetooth.Advertisement.BluetoothLEAdvertisementWatcher]::new()
+  $watcher.ScanningMode = [Windows.Devices.Bluetooth.Advertisement.BluetoothLEScanningMode]::{mode}
+
+  # Typed event handler to avoid Register-ObjectEvent scope issues
+  $handler = [Windows.Foundation.TypedEventHandler[
+      Windows.Devices.Bluetooth.Advertisement.BluetoothLEAdvertisementWatcher,
+      Windows.Devices.Bluetooth.Advertisement.BluetoothLEAdvertisementReceivedEventArgs
+    ]] {{
+      param($sender, $args)
+
+      $addr = Format-BTAddress $args.BluetoothAddress
+      $name = $args.Advertisement.LocalName
+      $rssi = $args.RawSignalStrengthInDBm
+
+      if (-not $script:seen.ContainsKey($addr)) {{
+        $script:seen[$addr] = [ordered]@{{
+          name = $name
+          address = $addr
+          rssi_dbm = $rssi
+          first_seen = (Get-Date).ToString("o")
+          last_seen = (Get-Date).ToString("o")
+          hits = 1
+        }}
+      }} else {{
+        $script:seen[$addr].last_seen = (Get-Date).ToString("o")
+        $script:seen[$addr].hits = [int]$script:seen[$addr].hits + 1
+        if (-not $script:seen[$addr].name -and $name) {{ $script:seen[$addr].name = $name }}
+        $script:seen[$addr].rssi_dbm = $rssi
+      }}
+  }}
+
+  $token = $watcher.add_Received($handler)
+  $watcher.Start()
+  Start-Sleep -Milliseconds {duration_ms}
+  $watcher.Stop()
+  $watcher.remove_Received($token) | Out-Null
+
+
+  @($script:seen.Values) | ConvertTo-Json -Depth 8 -Compress
+}} catch {{
+  @{{ error = $_.Exception.Message }} | ConvertTo-Json -Depth 6 -Compress
+}}
+"""
+
+
+
+def bluetooth_scan_nearby(params: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Scan for nearby Bluetooth LE advertising devices (paired or not).
+    """
+    try:
+        if os.name != "nt":
+            return {"result": {"devices": [], "error": "Windows only"}}
+
+        duration_seconds = int(params.get("duration_seconds", 6))
+        duration_seconds = max(1, min(20, duration_seconds))
+        active_scan = bool(params.get("active_scan", True))
+        max_devices = int(params.get("max_devices", 40))
+        max_devices = max(1, min(200, max_devices))
+
+        code, obj, err = _ps_json(_ble_scan_ps(duration_seconds * 1000, active_scan))
+        if code != 0:
+            return {"result": {"devices": [], "error": err or "PowerShell scan failed"}}
+        
+        if obj is None:
+            return {
+                "result": {
+                    "devices": [],
+                    "returned": 0,
+                    "note": "No BLE advertisements were captured during the scan window (this can be normal).",
+                }
+            }
+
+
+        if isinstance(obj, dict) and obj.get("error"):
+            return {"result": {"devices": [], "error": obj["error"]}}
+
+        devices = obj if isinstance(obj, list) else [obj]
+
+        # Best-effort paired flag by name match
+        paired = bluetooth_list_paired({}).get("result", {}).get("devices", [])
+        paired_names = {str(d.get("FriendlyName", "")).strip().lower() for d in paired if d.get("FriendlyName")}
+
+        for d in devices:
+            nm = (d.get("name") or "").strip().lower()
+            d["paired_known"] = bool(nm and nm in paired_names)
+
+        def _sort_key(x: Dict[str, Any]):
+            rssi = x.get("rssi_dbm")
+            rssi_val = int(rssi) if isinstance(rssi, (int, float)) else -999
+            return (-rssi_val, (x.get("name") or "").lower())
+
+        devices.sort(key=_sort_key)
+        devices = devices[:max_devices]
+
         return {
             "result": {
-                "supported": False,
-                "action": "open_settings",
-                "uri": "ms-settings:bluetooth",
-                "requested_device": name or None,
-                "note": "UIA-based connect will be added later. For now, Settings is opened to connect manually.",
+                "duration_seconds": duration_seconds,
+                "active_scan": active_scan,
+                "returned": len(devices),
+                "devices": devices,
+                "note": "BLE advertising scan. Some classic devices may not appear unless discoverable.",
             }
         }
     except Exception as e:
-        return {"result": {"supported": False, "error": str(e), "requested_device": name or None}}
+        # Never let runner throw a 500
+        return {"result": {"devices": [], "error": f"Unhandled error: {e}"}}
 
 

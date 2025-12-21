@@ -89,6 +89,8 @@ from .tools_troubleshoot import (
 
 from .tools_about import about_get_state, about_rename_pc
 
+from .tools_bluetooth import bluetooth_scan_nearby
+
 
 
 
@@ -129,6 +131,8 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "bluetooth.toggle": bluetooth_toggle,
     "bluetooth.list_paired": bluetooth_list_paired,
     "bluetooth.connect_paired": bluetooth_connect_paired,
+    "bluetooth.scan_nearby": bluetooth_scan_nearby,
+
 
     "uia.get_status": uia_get_status,
 

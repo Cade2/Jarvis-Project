@@ -1018,6 +1018,11 @@ def handle_user_message(user_message: str) -> None:
             return
         _run_tool("bluetooth.connect_paired", {"name": name})
         return
+    
+    if normalized in ("scan bluetooth", "bluetooth scan", "bt scan", "nearby bluetooth", "list nearby bluetooth"):
+        _run_tool("bluetooth.scan_nearby", {"duration_seconds": 6, "active_scan": True, "max_devices": 40})
+        return
+
 
     # -------------------------
     # Audio

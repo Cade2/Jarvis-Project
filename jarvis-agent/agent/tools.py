@@ -396,7 +396,7 @@ TOOLS.update({
     ),
     "bluetooth.connect_paired": Tool(
         name="bluetooth.connect_paired",
-        description="Best-effort connect to a paired device (v0 opens Bluetooth settings).",
+        description="Best-effort pair/connect to a Bluetooth device by name (falls back to Settings if blocked).",
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("bluetooth.connect_paired"),
     ),
@@ -703,6 +703,13 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("network.hotspot_toggle"),
     ),
+    "bluetooth.scan_nearby": Tool(
+        name="bluetooth.scan_nearby",
+        description="Scan for nearby Bluetooth devices (BLE advertising). Flags which are already paired (best-effort).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("bluetooth.scan_nearby"),
+    ),
+
 
 
 
