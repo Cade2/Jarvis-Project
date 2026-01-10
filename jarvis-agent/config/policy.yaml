@@ -17,6 +17,7 @@ allow_domains:
   - advanced
   - troubleshoot
   - about
+  - time
 
 allowed_domains:
   - system.get_info
@@ -57,6 +58,14 @@ allowed_domains:
   - power.srum_report
   - bluetooth.scan_nearby
 
+
+  - time.get_state
+  - time.set_auto_time
+  - time.set_auto_timezone
+  - time.set_timezone
+  - time.sync_now
+  - time.set_show_systray_datetime
+  - time.set_show_clock_notification_center
 
 
 

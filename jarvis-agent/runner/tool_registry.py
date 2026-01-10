@@ -91,6 +91,15 @@ from .tools_about import about_get_state, about_rename_pc
 
 from .tools_bluetooth import bluetooth_scan_nearby
 
+from .tools_time import (
+    time_get_state,
+    time_set_auto_time,
+    time_set_auto_timezone,
+    time_set_timezone,
+    time_sync_now,
+    time_set_show_systray_datetime,
+    time_set_show_clock_notification_center,
+)
 
 
 
@@ -205,6 +214,14 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "network.hotspot_status": network_hotspot_status,
     "network.hotspot_toggle": network_hotspot_toggle,
 
+    # ----- Date & time (Time & language) -----
+    "time.get_state": time_get_state,
+    "time.set_auto_time": time_set_auto_time,
+    "time.set_auto_timezone": time_set_auto_timezone,
+    "time.set_timezone": time_set_timezone,
+    "time.sync_now": time_sync_now,
+    "time.set_show_systray_datetime": time_set_show_systray_datetime,
+    "time.set_show_clock_notification_center": time_set_show_clock_notification_center,
 
 
 

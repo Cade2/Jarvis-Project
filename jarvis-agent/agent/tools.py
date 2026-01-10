@@ -709,6 +709,50 @@ TOOLS.update({
         risk=RiskLevel.READ_ONLY,
         func=_runner_tool("bluetooth.scan_nearby"),
     ),
+    # ----- Date & time (Time & language) -----
+    "time.get_state": Tool(
+        name="time.get_state",
+        description="Get Date & Time / Time zone settings status (best-effort).",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("time.get_state"),
+    ),
+    "time.set_auto_time": Tool(
+        name="time.set_auto_time",
+        description='Turn "Set time automatically" on/off.',
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("time.set_auto_time"),
+    ),
+    "time.set_auto_timezone": Tool(
+        name="time.set_auto_timezone",
+        description='Turn "Set time zone automatically" on/off.',
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("time.set_auto_timezone"),
+    ),
+    "time.set_timezone": Tool(
+        name="time.set_timezone",
+        description="Set the current time zone (only when auto time zone is off).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("time.set_timezone"),
+    ),
+    "time.sync_now": Tool(
+        name="time.sync_now",
+        description="Sync time now (w32tm /resync).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("time.sync_now"),
+    ),
+    "time.set_show_systray_datetime": Tool(
+        name="time.set_show_systray_datetime",
+        description="Show/hide time and date in the system tray (taskbar clock).",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("time.set_show_systray_datetime"),
+    ),
+    "time.set_show_clock_notification_center": Tool(
+        name="time.set_show_clock_notification_center",
+        description="Show/hide time in the Notification Center.",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("time.set_show_clock_notification_center"),
+    ),
+
 
 
 

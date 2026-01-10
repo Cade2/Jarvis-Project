@@ -75,6 +75,39 @@ ALIASES = {
     "timeouts": "power get timeouts",
     "battery usage per app": "srum report",
     "per app battery usage": "srum report",
+
+    # ----- time & language (date & time) -----
+    "time status": "date time status",
+    "date & time status": "date time status",
+    "date and time status": "date time status",
+
+    "set time automatically on": "auto time on",
+    "set time automatically off": "auto time off",
+    "turn on set time automatically": "auto time on",
+    "turn off set time automatically": "auto time off",
+    "enable set time automatically": "auto time on",
+    "disable set time automatically": "auto time off",
+
+    "set time zone automatically on": "auto timezone on",
+    "set time zone automatically off": "auto timezone off",
+    "turn on set time zone automatically": "auto timezone on",
+    "turn off set time zone automatically": "auto timezone off",
+    "enable set time zone automatically": "auto timezone on",
+    "disable set time zone automatically": "auto timezone off",
+
+    "show time and date in the system tray on": "systray time on",
+    "show time and date in the system tray off": "systray time off",
+    "show time and date in system tray on": "systray time on",
+    "show time and date in system tray off": "systray time off",
+
+    "show time in notification center on": "notification time on",
+    "show time in notification center off": "notification time off",
+
+    "sync now": "sync time",
+    "sync time now": "sync time",
+    "resync now": "sync time",
+    "resync time": "sync time",
+
 }
 
 
@@ -137,6 +170,8 @@ KNOWN_COMMANDS = set(ALIASES.keys()) | {
     "title bar shake on/off",
     "alt tab tabs 3/5/20/off",
 
+
+    
 }
 
 
@@ -812,6 +847,83 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("network.hotspot_toggle", {"enabled": False})
         return
 
+
+    def _run_tool_elevate_if_needed(tool_name: str, params: dict):
+        res = _run_tool(tool_name, params)
+
+        payload = None
+        if isinstance(res, dict):
+            if isinstance(res.get("result"), dict):
+                payload = res["result"]
+            else:
+                payload = res
+
+        if isinstance(payload, dict) and payload.get("needs_elevation"):
+            # Ask runner to relaunch elevated (this should trigger UAC)
+            _run_tool("runner.relaunch_elevated", {})
+            return
+        return
+
+
+    # -------------------------
+    # Time & language -> Date & time
+    # -------------------------
+
+    # Manual elevate command (always available)
+    if normalized in ("elevate runner", "run as admin", "elevate"):
+        _run_tool("runner.relaunch_elevated", {})
+        return
+
+    if normalized in ("date time status",):
+        _run_tool("time.get_state", {})
+        return
+
+    # Admin-required (auto-elevate when needed)
+    if normalized in ("sync time",):
+        _run_tool_elevate_if_needed("time.sync_now", {})
+        return
+
+    if normalized in ("auto time on",):
+        _run_tool_elevate_if_needed("time.set_auto_time", {"enabled": True})
+        return
+
+    if normalized in ("auto time off",):
+        _run_tool_elevate_if_needed("time.set_auto_time", {"enabled": False})
+        return
+
+    if normalized in ("auto timezone on",):
+        _run_tool_elevate_if_needed("time.set_auto_timezone", {"enabled": True})
+        return
+
+    if normalized in ("auto timezone off",):
+        _run_tool_elevate_if_needed("time.set_auto_timezone", {"enabled": False})
+        return
+
+    # Non-admin HKCU toggles (no elevation needed)
+    if normalized in ("systray time on",):
+        _run_tool("time.set_show_systray_datetime", {"enabled": True})
+        return
+
+    if normalized in ("systray time off",):
+        _run_tool("time.set_show_systray_datetime", {"enabled": False})
+        return
+
+    if normalized in ("notification time on",):
+        _run_tool("time.set_show_clock_notification_center", {"enabled": True})
+        return
+
+    if normalized in ("notification time off",):
+        _run_tool("time.set_show_clock_notification_center", {"enabled": False})
+        return
+
+    # e.g. "set time zone to South Africa Standard Time"
+    m = re.search(r"^(?:set|change)\s+time\s*zone\s+to\s+(.+)$", raw, flags=re.I)
+    if m:
+        tz_id = m.group(1).strip().strip('"')
+        if tz_id:
+            # tzutil may or may not require elevation depending on policy; keep it best-effort
+            _run_tool("time.set_timezone", {"timezone_id": tz_id})
+            return
 
 
     # -------------------------
