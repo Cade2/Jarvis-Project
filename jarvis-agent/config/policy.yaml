@@ -18,6 +18,7 @@ allow_domains:
   - troubleshoot
   - about
   - time
+  - gaming
 
 allowed_domains:
   - system.get_info
@@ -57,6 +58,9 @@ allowed_domains:
   - power.set_mode
   - power.srum_report
   - bluetooth.scan_nearby
+  - gaming.get_game_mode
+  - gaming.set_game_mode
+
 
 
   - time.get_state

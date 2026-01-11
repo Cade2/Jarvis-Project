@@ -101,6 +101,9 @@ from .tools_time import (
     time_set_show_clock_notification_center,
 )
 
+from .tools_gaming import gaming_get_game_mode, gaming_set_game_mode
+
+
 
 
 
@@ -223,6 +226,9 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "time.set_show_systray_datetime": time_set_show_systray_datetime,
     "time.set_show_clock_notification_center": time_set_show_clock_notification_center,
 
+    # ----- Gaming -----
+    "gaming.get_game_mode": gaming_get_game_mode,
+    "gaming.set_game_mode": gaming_set_game_mode,
 
 
 

@@ -51,23 +51,42 @@ def ensure_runner_started() -> None:
 
 def stop_runner() -> None:
     """
-    Best-effort stop for a runner that we started (tracked via PID file).
+    Best-effort stop for a runner that we started.
+    Falls back to killing any process listening on port 8765 (Windows).
     """
-    if not RUNNER_PID_FILE.exists():
-        return
+    killed_any = False
 
-    try:
-        pid = int(RUNNER_PID_FILE.read_text(encoding="utf-8").strip())
-    except Exception:
-        return
-
-    try:
-        if os.name == "nt":
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False)
-        else:
-            os.kill(pid, signal.SIGTERM)
-    finally:
+    # 1) Try PID file
+    if RUNNER_PID_FILE.exists():
         try:
-            RUNNER_PID_FILE.unlink()
+            pid = int(RUNNER_PID_FILE.read_text(encoding="utf-8").strip())
+            if os.name == "nt":
+                subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"], check=False)
+            else:
+                os.kill(pid, signal.SIGTERM)
+            killed_any = True
         except Exception:
             pass
+        finally:
+            try:
+                RUNNER_PID_FILE.unlink()
+            except Exception:
+                pass
+
+    # 2) Fallback: kill by port (Windows)
+    if os.name == "nt":
+        try:
+            p = subprocess.run(["netstat", "-ano"], capture_output=True, text=True, check=False)
+            out = p.stdout or ""
+            pids = set()
+            for line in out.splitlines():
+                if ":8765" in line and "LISTENING" in line:
+                    parts = line.split()
+                    if parts:
+                        pids.add(parts[-1])
+            for pid in pids:
+                subprocess.run(["taskkill", "/PID", pid, "/T", "/F"], check=False)
+                killed_any = True
+        except Exception:
+            pass
+

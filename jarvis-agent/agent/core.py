@@ -108,6 +108,20 @@ ALIASES = {
     "resync now": "sync time",
     "resync time": "sync time",
 
+    # gaming
+    "game mode": "game mode status",
+    "game mode status": "game mode status",
+    "gaming mode": "game mode status",
+
+    "game mode on": "game mode on",
+    "turn on game mode": "game mode on",
+    "enable game mode": "game mode on",
+
+    "game mode off": "game mode off",
+    "turn off game mode": "game mode off",
+    "disable game mode": "game mode off",
+
+
 }
 
 
@@ -925,6 +939,21 @@ def handle_user_message(user_message: str) -> None:
             _run_tool("time.set_timezone", {"timezone_id": tz_id})
             return
 
+
+    # -------------------------
+    # Gaming -> Game Mode
+    # -------------------------
+    if normalized in ("game mode status",):
+        _run_tool("gaming.get_game_mode", {})
+        return
+
+    if normalized in ("game mode on",):
+        _run_tool("gaming.set_game_mode", {"enabled": True})
+        return
+
+    if normalized in ("game mode off",):
+        _run_tool("gaming.set_game_mode", {"enabled": False})
+        return
 
     # -------------------------
     # Nearby sharing (MK2)

@@ -752,6 +752,20 @@ TOOLS.update({
         risk=RiskLevel.LOW,
         func=_runner_tool("time.set_show_clock_notification_center"),
     ),
+    # ----- Gaming -----
+    "gaming.get_game_mode": Tool(
+        name="gaming.get_game_mode",
+        description="Get Game Mode status.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("gaming.get_game_mode"),
+    ),
+    "gaming.set_game_mode": Tool(
+        name="gaming.set_game_mode",
+        description="Turn Game Mode on/off.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("gaming.set_game_mode"),
+    ),
+
 
 
 
