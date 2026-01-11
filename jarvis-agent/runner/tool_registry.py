@@ -103,6 +103,16 @@ from .tools_time import (
 
 from .tools_gaming import gaming_get_game_mode, gaming_set_game_mode
 
+from .tools_accessibility import (
+    accessibility_get_vision_state,
+    accessibility_set_text_size,
+    accessibility_set_always_show_scrollbars,
+    accessibility_set_transparency_effects,
+    accessibility_set_animation_effects,
+    accessibility_set_dismiss_notifications_after,
+)
+
+
 
 
 
@@ -229,6 +239,15 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     # ----- Gaming -----
     "gaming.get_game_mode": gaming_get_game_mode,
     "gaming.set_game_mode": gaming_set_game_mode,
+
+    # ----- Accessibility (Vision: text size + visual effects) -----
+    "accessibility.get_vision_state": accessibility_get_vision_state,
+    "accessibility.set_text_size": accessibility_set_text_size,
+    "accessibility.set_always_show_scrollbars": accessibility_set_always_show_scrollbars,
+    "accessibility.set_transparency_effects": accessibility_set_transparency_effects,
+    "accessibility.set_animation_effects": accessibility_set_animation_effects,
+    "accessibility.set_dismiss_notifications_after": accessibility_set_dismiss_notifications_after,
+
 
 
 

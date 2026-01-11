@@ -765,7 +765,43 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("gaming.set_game_mode"),
     ),
-
+    # ----- Accessibility (Vision: text size + visual effects) -----
+    "accessibility.get_vision_state": Tool(
+        name="accessibility.get_vision_state",
+        description="Get Accessibility (Vision) state: text size + visual effects.",
+        risk=RiskLevel.READ_ONLY,
+        func=_runner_tool("accessibility.get_vision_state"),
+    ),
+    "accessibility.set_text_size": Tool(
+        name="accessibility.set_text_size",
+        description="Set Accessibility text size (percent).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_text_size"),
+    ),
+    "accessibility.set_always_show_scrollbars": Tool(
+        name="accessibility.set_always_show_scrollbars",
+        description="Toggle Always show scrollbars.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_always_show_scrollbars"),
+    ),
+    "accessibility.set_transparency_effects": Tool(
+        name="accessibility.set_transparency_effects",
+        description="Toggle Transparency effects.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_transparency_effects"),
+    ),
+    "accessibility.set_animation_effects": Tool(
+        name="accessibility.set_animation_effects",
+        description="Toggle Animation effects.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_animation_effects"),
+    ),
+    "accessibility.set_dismiss_notifications_after": Tool(
+        name="accessibility.set_dismiss_notifications_after",
+        description="Set dismiss notifications after X seconds.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_dismiss_notifications_after"),
+    ),
 
 
 

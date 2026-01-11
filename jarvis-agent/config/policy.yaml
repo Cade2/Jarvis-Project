@@ -19,6 +19,8 @@ allow_domains:
   - about
   - time
   - gaming
+  - accessibility
+
 
 allowed_domains:
   - system.get_info
@@ -70,6 +72,14 @@ allowed_domains:
   - time.sync_now
   - time.set_show_systray_datetime
   - time.set_show_clock_notification_center
+
+  - accessibility.get_vision_state
+  - accessibility.set_text_size
+  - accessibility.set_always_show_scrollbars
+  - accessibility.set_transparency_effects
+  - accessibility.set_animation_effects
+  - accessibility.set_dismiss_notifications_after
+
 
 
 

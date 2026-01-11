@@ -121,6 +121,19 @@ ALIASES = {
     "turn off game mode": "game mode off",
     "disable game mode": "game mode off",
 
+    # accessibility (vision)
+    "vision status": "accessibility vision status",
+    "accessibility vision status": "accessibility vision status",
+
+    "transparency effects on": "transparency effects on",
+    "transparency effects off": "transparency effects off",
+    "animation effects on": "animation effects on",
+    "animation effects off": "animation effects off",
+
+    "always show scrollbars on": "always show scrollbars on",
+    "always show scrollbars off": "always show scrollbars off",
+
+
 
 }
 
@@ -1202,6 +1215,52 @@ def handle_user_message(user_message: str) -> None:
     if normalized in ("unmute", "sound unmute", "audio unmute"):
         _run_tool("audio.set_mute", {"muted": False})
         return
+    
+
+    # -------------------------
+    # Accessibility -> Vision (Phase 1)
+    # -------------------------
+    if normalized in ("accessibility vision status",):
+        _run_tool("accessibility.get_vision_state", {})
+        return
+
+    if normalized in ("transparency effects on",):
+        _run_tool("accessibility.set_transparency_effects", {"enabled": True})
+        return
+    if normalized in ("transparency effects off",):
+        _run_tool("accessibility.set_transparency_effects", {"enabled": False})
+        return
+
+    if normalized in ("animation effects on",):
+        _run_tool("accessibility.set_animation_effects", {"enabled": True})
+        return
+    if normalized in ("animation effects off",):
+        _run_tool("accessibility.set_animation_effects", {"enabled": False})
+        return
+
+    if normalized in ("always show scrollbars on",):
+        _run_tool("accessibility.set_always_show_scrollbars", {"enabled": True})
+        return
+    if normalized in ("always show scrollbars off",):
+        _run_tool("accessibility.set_always_show_scrollbars", {"enabled": False})
+        return
+
+    # e.g. "set text size to 120"
+    m = re.search(r"^set\s+text\s+size\s+to\s+(\d{2,3})$", raw, flags=re.I)
+    if m:
+        _run_tool("accessibility.set_text_size", {"percent": int(m.group(1))})
+        return
+
+    # e.g. "dismiss notifications after 30 seconds"
+    # supports: 5,7,15,30 seconds, 1 minute, 5 minutes
+    m = re.search(r"^dismiss\s+notifications\s+after\s+(\d+)\s*(second|seconds|minute|minutes)$", raw, flags=re.I)
+    if m:
+        n = int(m.group(1))
+        unit = m.group(2).lower()
+        seconds = n * 60 if "minute" in unit else n
+        _run_tool("accessibility.set_dismiss_notifications_after", {"seconds": seconds})
+        return
+
 
     # -------------------------
     # MK1 commands
