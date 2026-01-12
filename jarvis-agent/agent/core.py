@@ -9,10 +9,13 @@ import concurrent.futures
 from .policy import Policy
 from .tools import TOOLS
 from .safety import should_confirm, log_action, Tool
-from .models import ChatModel
+from .models import load_model_roles
+
 
 _policy = Policy.load()
-_chat_model = ChatModel()   # local LLM "brain"
+
+_general_model, _coder_model, _research_model = load_model_roles()
+
 
 # If Jarvis suggests a command, store it here so "yes" can execute it.
 _PENDING_SUGGESTION: Optional[str] = None
@@ -576,7 +579,7 @@ def _route_with_llm(user_text: str) -> Optional[Dict[str, Any]]:
     ]
 
     def _call_model():
-        return _chat_model.chat(prompt).strip()
+        return _coder_model.chat(prompt).strip()
 
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as ex:
@@ -1573,7 +1576,7 @@ def handle_user_message(user_message: str) -> None:
 
         content = parts[1].strip()
         print("Jarvis: (summarising)...")
-        reply = _chat_model.chat([
+        reply = _research_model.chat([
             "You are a helpful, concise assistant.",
             "Summarise this text clearly and briefly:",
             content,
@@ -1652,7 +1655,7 @@ def handle_user_message(user_message: str) -> None:
     # fallback chat
     # -------------------------
     print("Jarvis: (thinking)...")
-    reply = _chat_model.chat([
+    reply = _general_model.chat([
         "You are a helpful, concise assistant named Jarvis.",
         f"User: {user_message}",
         "Assistant:",

@@ -4,6 +4,12 @@ import json
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from typing import List, Tuple, Any, Dict
+from pathlib import Path
+import urllib.request
+import urllib.error
+
+
 
 class DummyPlannerModel:
     """
@@ -38,6 +44,47 @@ class DummyPlannerModel:
             "tool_name": "none",
             "params": {}
         })
+
+
+class OllamaModel:
+    """
+    Minimal Ollama client using stdlib only (no requests dependency).
+    Uses /api/generate with a single prompt string.
+    """
+    def __init__(self, model_name: str, host: str = "http://127.0.0.1:11434"):
+        self.model_name = model_name
+        self.host = host.rstrip("/")
+
+    def chat(self, messages: List[str], max_new_tokens: int = 256) -> str:
+        prompt = "\n".join(messages)
+
+        url = f"{self.host}/api/generate"
+        payload = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False,
+            # max_new_tokens equivalent in Ollama is num_predict
+            "options": {"num_predict": int(max_new_tokens)}
+        }
+
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url,
+            data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                body = resp.read().decode("utf-8")
+                obj = json.loads(body)
+                return (obj.get("response") or "").strip()
+        except urllib.error.URLError as e:
+            raise RuntimeError(
+                "Ollama is not reachable. Make sure it's running (try: `ollama serve`) "
+                f"and that {self.host} is accessible."
+            ) from e
 
 
 class ChatModel:
@@ -106,3 +153,48 @@ class ChatModel:
         full = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
         # Return only the new text after the prompt
         return full[len(prompt):].strip()
+
+
+def _repo_root() -> Path:
+    # agent/models.py -> agent/ -> jarvis-agent/
+    return Path(__file__).resolve().parent.parent
+
+def _load_models_config() -> Dict[str, Any]:
+    cfg_path = _repo_root() / "config" / "models.json"
+    if cfg_path.exists():
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+
+    # Safe defaults (if user forgot to create config/models.json)
+    return {
+        "models": {
+            "general": {"provider": "ollama", "name": "llama3.1:8b"},
+            "coder": {"provider": "ollama", "name": "qwen2.5-coder:14b"},
+            "research": {"provider": "ollama", "name": "qwen2.5:14b-instruct-q4_K_M"},
+        },
+        "ollama": {"host": "http://127.0.0.1:11434"},
+    }
+
+def build_model(model_cfg: Dict[str, Any], ollama_host: str) -> Any:
+    provider = (model_cfg.get("provider") or "hf").lower()
+    name = model_cfg.get("name") or "microsoft/phi-2"
+
+    if provider == "ollama":
+        return OllamaModel(name, host=ollama_host)
+
+    # fallback to your current HF model
+    return ChatModel(model_name=name)
+
+def load_model_roles() -> Tuple[Any, Any, Any]:
+    """
+    Returns: (general_model, coder_model, research_model)
+    Each model must expose `.chat(messages: List[str], max_new_tokens=...) -> str`
+    """
+    cfg = _load_models_config()
+    ollama_host = (cfg.get("ollama") or {}).get("host", "http://127.0.0.1:11434")
+
+    models = cfg.get("models") or {}
+    general = build_model(models.get("general", {}), ollama_host)
+    coder = build_model(models.get("coder", {}), ollama_host)
+    research = build_model(models.get("research", {}), ollama_host)
+    return general, coder, research
