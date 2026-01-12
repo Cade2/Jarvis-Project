@@ -55,7 +55,7 @@ class OllamaModel:
         self.model_name = model_name
         self.host = host.rstrip("/")
 
-    def chat(self, messages: List[str], max_new_tokens: int = 256) -> str:
+    def chat(self, messages: List[str], max_new_tokens: int = 256, temperature: float = 0.2) -> str:
         prompt = "\n".join(messages)
 
         url = f"{self.host}/api/generate"
@@ -64,7 +64,10 @@ class OllamaModel:
             "prompt": prompt,
             "stream": False,
             # max_new_tokens equivalent in Ollama is num_predict
-            "options": {"num_predict": int(max_new_tokens)}
+            "options": {
+                "num_predict": int(max_new_tokens),
+                "temperature": float(temperature),
+            },
         }
 
         data = json.dumps(payload).encode("utf-8")
@@ -85,6 +88,7 @@ class OllamaModel:
                 "Ollama is not reachable. Make sure it's running (try: `ollama serve`) "
                 f"and that {self.host} is accessible."
             ) from e
+
 
 
 class ChatModel:
@@ -117,7 +121,7 @@ class ChatModel:
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def chat(self, messages: List[str], max_new_tokens: int = 72) -> str:
+    def chat(self, messages: List[str], max_new_tokens: int = 256, temperature: float = 0.2) -> str:
         """
         Very simple chat interface.
 
@@ -188,13 +192,57 @@ def build_model(model_cfg: Dict[str, Any], ollama_host: str) -> Any:
 def load_model_roles() -> Tuple[Any, Any, Any]:
     """
     Returns: (general_model, coder_model, research_model)
-    Each model must expose `.chat(messages: List[str], max_new_tokens=...) -> str`
+
+    Each returned model exposes:
+      `.chat(messages: List[str], max_new_tokens=..., temperature=...) -> str`
+
+    RoleModel wraps each model to apply default generation settings from config.
     """
     cfg = _load_models_config()
     ollama_host = (cfg.get("ollama") or {}).get("host", "http://127.0.0.1:11434")
 
-    models = cfg.get("models") or {}
-    general = build_model(models.get("general", {}), ollama_host)
-    coder = build_model(models.get("coder", {}), ollama_host)
-    research = build_model(models.get("research", {}), ollama_host)
-    return general, coder, research
+    models_cfg = cfg.get("models") or {}
+    general = build_model(models_cfg.get("general", {}), ollama_host)
+    coder = build_model(models_cfg.get("coder", {}), ollama_host)
+    research = build_model(models_cfg.get("research", {}), ollama_host)
+
+    # Apply per-role generation defaults (speed/quality tuning)
+    gen_cfg = cfg.get("generation") or {}
+
+    g = gen_cfg.get("general", {})
+    c = gen_cfg.get("coder", {})
+    r = gen_cfg.get("research", {})
+
+    general_wrapped = RoleModel(
+        general,
+        num_predict=int(g.get("num_predict", 120)),
+        temperature=float(g.get("temperature", 0.4)),
+    )
+    coder_wrapped = RoleModel(
+        coder,
+        num_predict=int(c.get("num_predict", 220)),
+        temperature=float(c.get("temperature", 0.2)),
+    )
+    research_wrapped = RoleModel(
+        research,
+        num_predict=int(r.get("num_predict", 350)),
+        temperature=float(r.get("temperature", 0.3)),
+    )
+
+    return general_wrapped, coder_wrapped, research_wrapped
+
+
+
+class RoleModel:
+    def __init__(self, base_model, num_predict: int, temperature: float):
+        self.base = base_model
+        self.num_predict = num_predict
+        self.temperature = temperature
+
+    def chat(self, messages: List[str], max_new_tokens: int = None, temperature: float = None) -> str:
+        return self.base.chat(
+            messages,
+            max_new_tokens=max_new_tokens or self.num_predict,
+            temperature=temperature if temperature is not None else self.temperature,
+        )
+
