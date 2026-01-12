@@ -49,6 +49,16 @@ def ensure_runner_started() -> None:
     raise RuntimeError("Runner failed to start. Try: python -m runner.server")
 
 
+def restart_runner() -> None:
+    """Best-effort: stop the runner and start it again."""
+    try:
+        stop_runner()
+    except Exception:
+        pass
+    ensure_runner_started()
+
+
+
 def stop_runner() -> None:
     """
     Best-effort stop for a runner that we started.

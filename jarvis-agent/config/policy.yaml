@@ -20,6 +20,8 @@ allow_domains:
   - time
   - gaming
   - accessibility
+  - runner.restart
+
 
 
 allowed_domains:
@@ -79,6 +81,25 @@ allowed_domains:
   - accessibility.set_transparency_effects
   - accessibility.set_animation_effects
   - accessibility.set_dismiss_notifications_after
+
+  - accessibility.get_mouse_touch_state
+  - accessibility.set_mouse_pointer_style
+  - accessibility.set_mouse_pointer_size
+  - accessibility.set_mouse_indicator
+  - accessibility.set_pointer_trails
+  - accessibility.set_pointer_shadow
+  - accessibility.set_touch_indicator
+
+  - accessibility.get_mouse_touch_state
+  - accessibility.set_mouse_pointer_style
+  - accessibility.set_mouse_pointer_color
+  - accessibility.set_mouse_pointer_size
+  - accessibility.set_mouse_indicator
+  - accessibility.set_mouse_pointer_trails
+  - accessibility.set_mouse_pointer_trails_length
+  - accessibility.set_mouse_pointer_shadow
+  - accessibility.set_touch_indicator
+  - accessibility.set_touch_indicator_enhanced
 
 
 

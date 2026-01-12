@@ -31,6 +31,136 @@ def _normalize(text: str) -> str:
     return " ".join(text.split())
 
 
+# -------------------------
+# Universal alias engine
+# -------------------------
+
+GLOBAL_REPLACEMENTS: list[tuple[str, str]] = [
+    # devices / system
+    (r"\bpc\b", "system"),
+    (r"\bcomputer\b", "system"),
+    (r"\bdevice\b", "system"),
+
+    # common short forms
+    (r"\bbt\b", "bluetooth"),
+    (r"\bwi[-\s]?fi\b", "wifi"),
+    (r"\bui\s*automation\b", "uia"),
+
+    # status/state
+    (r"\bstate\b", "status"),
+
+    # on/off verbs (keeps meaning)
+    (r"\bturn\s+on\b", "on"),
+    (r"\bswitch\s+on\b", "on"),
+    (r"\benable\b", "on"),
+    (r"\bturn\s+off\b", "off"),
+    (r"\bswitch\s+off\b", "off"),
+    (r"\bdisable\b", "off"),
+
+    # optional politeness/filler removal
+    (r"\bplease\b", ""),
+    (r"\bkindly\b", ""),
+    (r"\bcan\s+you\b", ""),
+    (r"\bcould\s+you\b", ""),
+
+    # "set X to Y" → "X Y" (helps tons of patterns)
+    (r"^set\s+(.+?)\s+to\s+(.+)$", r"\1 \2"),
+]
+
+
+def _apply_global_replacements(normalized: str) -> str:
+    out = normalized
+    for pattern, repl in GLOBAL_REPLACEMENTS:
+        out = re.sub(pattern, repl, out)
+    out = " ".join(out.split())
+    return out
+
+
+def _auto_alias(normalized: str) -> str:
+    """
+    Convert common natural phrasings into the canonical commands your handlers expect.
+    This is where "aliases for everything" actually happens.
+    """
+    s = _apply_global_replacements(normalized)
+
+    # ---- status/state normalization ----
+    # Most of your handlers use "<thing> status" or "<thing> state".
+    # We unify a bunch of common variants.
+    status_map = {
+        "system status": "system info",
+        "system info status": "system info",
+        "storage status": "storage",
+        "disk status": "storage",
+        "drive status": "storage",
+
+        "display status": "display status",
+        "screen status": "display status",
+
+        "audio status": "audio status",
+        "sound status": "audio status",
+        "volume status": "audio status",
+
+        "bluetooth status": "bluetooth status",
+        "wifi status": "network status",
+        "network status": "network status",
+
+        "power status": "power status",
+        "battery status": "power status",
+
+        "runner status": "runner is elevated",
+        "runner elevated status": "runner is elevated",
+        "uia status": "uia status",
+
+        "vision status": "accessibility vision status",
+        "accessibility status": "accessibility vision status",
+    }
+    if s in status_map:
+        return status_map[s]
+
+    # ---- wifi/network common language ----
+    if s in ("wifi scan", "wifi networks", "nearby wifi", "list wifi", "list wifi networks"):
+        return "scan wifi"
+    if s in ("wifi scan detailed", "scan wifi detailed"):
+        return "scan wifi detailed"
+
+    # ---- on/off patterns that people naturally type ----
+    # (global replacements already changed enable/disable/turn on/off)
+    # We just align the "wifi on/off", "bluetooth on/off", etc.
+    if s == "wifi on":
+        return "wifi on"
+    if s == "wifi off":
+        return "wifi off"
+    if s == "bluetooth on":
+        return "bluetooth on"
+    if s == "bluetooth off":
+        return "bluetooth off"
+
+    # Energy saver synonyms
+    if s == "battery saver on":
+        return "energy saver on"
+    if s == "battery saver off":
+        return "energy saver off"
+    if s == "battery saver status":
+        return "energy saver status"
+
+    # ---- display scale synonyms ----
+    if s in ("scale status", "scaling status", "display scale status"):
+        return "display status"
+
+    # Default: return cleaned phrase
+    return s
+
+
+def _resolve_command(raw: str) -> str:
+    """
+    One place to normalize -> auto-alias -> manual ALIASES override.
+    Manual ALIASES wins at the end so you can force anything.
+    """
+    n = _normalize(raw)
+    n = _auto_alias(n)
+    return ALIASES.get(n, n)
+
+
 ALIASES = {
     # runner
     "runner elevated": "runner is elevated",
@@ -56,6 +186,12 @@ ALIASES = {
     "list wifi networks": "scan wifi",
     "scan wifi detailed": "scan wifi detailed",
     "wifi scan detailed": "scan wifi detailed",
+
+    # uia
+    "uia": "uia status",
+    "uia state": "uia status",
+    "ui automation": "uia status",
+    "ui automation status": "uia status",
 
 
     # settings
@@ -138,7 +274,56 @@ ALIASES = {
 }
 
 
-KNOWN_COMMANDS = set(ALIASES.keys()) | {
+def _auto_alias(normalized: str) -> str:
+    """
+    Create canonical forms for commands so lots of phrasings work without
+    manually listing every alias.
+    """
+    out = normalized
+
+    # Apply global replacements
+    for pattern, repl in GLOBAL_REPLACEMENTS:
+        out = re.sub(pattern, repl, out)
+
+    # normalize extra filler words
+    out = re.sub(r"\bplease\b", "", out)
+    out = re.sub(r"\bcan you\b", "", out)
+    out = re.sub(r"\bcould you\b", "", out)
+    out = re.sub(r"\bkindly\b", "", out)
+    out = " ".join(out.split())
+
+    # common "X status" patterns
+    if out in ("system status",):
+        return "system info"
+    if out in ("storage status", "disk status", "drive status"):
+        return "storage"
+    if out in ("bluetooth status",):
+        return "bluetooth status"
+    if out in ("wifi status", "network status"):
+        return "network status"
+    if out in ("display status", "screen status"):
+        return "display status"
+    if out in ("audio status", "sound status", "volume status"):
+        return "audio status"
+    if out in ("uia status",):
+        return "uia status"
+    if out in ("runner status",):
+        return "runner is elevated"
+
+    # Make "brightness up/down" more robust
+    out = out.replace("increase brightness", "brightness up")
+    out = out.replace("decrease brightness", "brightness down")
+
+    # Make "volume up/down" more robust
+    out = out.replace("increase volume", "volume up")
+    out = out.replace("decrease volume", "volume down")
+
+    return out
+
+
+
+
+KNOWN_COMMANDS = set(ALIASES.keys()) | set(ALIASES.values()) | {
     "help", "commands", "what can you do", "what can you do?",
     "system info", "my system", "pc info",
     "storage", "disk space", "drive space",
@@ -149,6 +334,8 @@ KNOWN_COMMANDS = set(ALIASES.keys()) | {
     "airplane mode", "open airplane mode",
     "airplane mode on", "turn airplane mode on",
     "airplane mode off", "turn airplane mode off",
+
+    "uia status", "uia get status", "ui automation", "ui automation status", "uia",
 
     "runner is elevated", "runner elevated?", "runner admin", "runner status",
     "elevate runner", "runner elevate", "runner restart admin",
@@ -208,8 +395,19 @@ def _did_you_mean(normalized: str) -> Optional[str]:
     matches = difflib.get_close_matches(normalized, list(KNOWN_COMMANDS), n=1, cutoff=0.78)
     return matches[0] if matches else None
 
+def _resolve_command(raw: str) -> str:
+    """
+    Normalize + auto-alias + explicit alias mapping.
+    """
+    n = _normalize(raw)
+    n = _auto_alias(n)
 
-def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
+    # Explicit alias map wins last (so you can override auto behavior)
+    return ALIASES.get(n, n)
+
+
+
+def _run_tool(tool_name: str, params: Dict[str, Any]) -> Any:
     tool: Tool = TOOLS[tool_name]
 
     if should_confirm(tool, params):
@@ -226,22 +424,24 @@ def _run_tool(tool_name: str, params: Dict[str, Any]) -> None:
             if typed != phrase:
                 print("Jarvis: Okay, I cancelled that action.")
                 log_action(tool, params, "cancelled")
-                return
+                return None
         else:
             choice = input("Proceed? (y/n): ").strip().lower()
             if choice not in ("y", "yes"):
                 print("Jarvis: Okay, I cancelled that action.")
                 log_action(tool, params, "cancelled")
-                return
+                return None
 
     try:
         result = tool.func(params)
         log_action(tool, params, "success")
         if result is not None:
             print(f"Jarvis: Tool returned: {result}")
+        return result
     except Exception as exc:
         print(f"Jarvis: Something went wrong while executing the tool: {exc}")
         log_action(tool, params, f"error: {exc}")
+        return None
 
 
 def _extract_when_from_text(text: str) -> str:
@@ -445,21 +645,8 @@ def handle_user_message(user_message: str) -> None:
         return
 
     text_lower = raw.strip().lower()
-    normalized = _normalize(raw)
+    normalized = _resolve_command(raw)
 
-    # If Jarvis previously suggested a command, handle yes/no.
-    if normalized in ("y", "yes") and _PENDING_SUGGESTION:
-        normalized = _PENDING_SUGGESTION
-        text_lower = normalized
-        raw = normalized
-        _PENDING_SUGGESTION = None
-    elif normalized in ("n", "no") and _PENDING_SUGGESTION:
-        print("Jarvis: Okay, cancelled.")
-        _PENDING_SUGGESTION = None
-        return
-
-    # Apply alias rewrite
-    normalized = ALIASES.get(normalized, normalized)
 
     # -------------------------
     # HELP
@@ -1046,6 +1233,18 @@ def handle_user_message(user_message: str) -> None:
         _run_tool("runner.relaunch_elevated", {})
         return
 
+    if normalized in (
+        "restart runner",
+        "reset runner",
+        "runner restart",
+        "runner reset",
+        "reset elevation",
+        "drop elevation",
+    ):
+        _run_tool("runner.restart", {})
+        return
+
+
     # -------------------------
     # Display
     # -------------------------
@@ -1246,10 +1445,11 @@ def handle_user_message(user_message: str) -> None:
         return
 
     # e.g. "set text size to 120"
-    m = re.search(r"^set\s+text\s+size\s+to\s+(\d{2,3})$", raw, flags=re.I)
+    m = re.search(r"^(?:set\s+)?text\s+size\s+(?:to\s+)?(\d{2,3})%?$", raw, flags=re.I)
     if m:
         _run_tool("accessibility.set_text_size", {"percent": int(m.group(1))})
         return
+
 
     # e.g. "dismiss notifications after 30 seconds"
     # supports: 5,7,15,30 seconds, 1 minute, 5 minutes
@@ -1260,6 +1460,106 @@ def handle_user_message(user_message: str) -> None:
         seconds = n * 60 if "minute" in unit else n
         _run_tool("accessibility.set_dismiss_notifications_after", {"seconds": seconds})
         return
+    
+    # -------------------------
+    # Accessibility -> Mouse pointer & touch
+    # -------------------------
+    if normalized in ("mouse pointer status", "mouse pointer and touch status", "accessibility mouse status"):
+        _run_tool("accessibility.get_mouse_touch_state", {})
+        return
+
+    # Pointer style
+    # Examples:
+    # "mouse pointer style white"
+    # "mouse pointer style custom purple"
+    m = re.search(r"^mouse\s+pointer\s+style\s+(white|black|inverted|custom)(?:\s+(.+))?$", raw, flags=re.I)
+    if m:
+        style = m.group(1).strip().lower()
+        color = (m.group(2).strip().lower() if m.group(2) else None)
+        payload = {"style": style}
+        if color:
+            payload["color"] = color
+        _run_tool("accessibility.set_mouse_pointer_style", payload)
+        return
+
+    # Shortcut: "mouse pointer color purple" (forces custom)
+    m = re.search(r"^mouse\s+pointer\s+color\s+(.+)$", raw, flags=re.I)
+    if m:
+        color = m.group(1).strip().lower()
+        _run_tool("accessibility.set_mouse_pointer_style", {"style": "custom", "color": color})
+        return
+
+    # Pointer size
+    # "set mouse pointer size to 5"
+    m = re.search(r"^(?:set\s+)?mouse\s+pointer\s+size\s+(?:to\s+)?(\d+)$", raw, flags=re.I)
+    if m:
+        _run_tool("accessibility.set_mouse_pointer_size", {"size": int(m.group(1))})
+        return
+
+    # Mouse indicator (Ctrl highlight)
+    if normalized in ("mouse indicator on",):
+        _run_tool("accessibility.set_mouse_indicator", {"enabled": True})
+        return
+    if normalized in ("mouse indicator off",):
+        _run_tool("accessibility.set_mouse_indicator", {"enabled": False})
+        return
+
+    # Pointer trails
+    if normalized in ("pointer trails off", "mouse trails off"):
+        _run_tool("accessibility.set_mouse_pointer_trails", {"enabled": False})
+        return
+    if normalized in ("pointer trails on", "mouse trails on"):
+        _run_tool("accessibility.set_mouse_pointer_trails", {"enabled": True})
+        return
+
+    # "pointer trails length 12"
+    m = re.search(r"^pointer\s+trails\s+length\s+(\d+)$", raw, flags=re.I)
+    if m:
+        _run_tool("accessibility.set_mouse_pointer_trails_length", {"length": int(m.group(1))})
+        return
+
+    # Pointer shadow
+    if normalized in ("pointer shadow on",):
+        _run_tool("accessibility.set_mouse_pointer_shadow", {"enabled": True})
+        return
+    if normalized in ("pointer shadow off",):
+        _run_tool("accessibility.set_mouse_pointer_shadow", {"enabled": False})
+        return
+
+
+    # Touch indicator
+    if normalized in ("touch indicator on",):
+        _run_tool("accessibility.set_touch_indicator", {"enabled": True})
+        return
+    if normalized in ("touch indicator off",):
+        _run_tool("accessibility.set_touch_indicator", {"enabled": False})
+        return
+
+    # "touch indicator darker on" / "touch indicator darker off" (enhanced mode)
+    if normalized in ("touch indicator darker on", "make touch circle darker on"):
+        # Implicitly enable touch indicator first, then enable enhanced mode.
+        _run_tool("accessibility.set_touch_indicator", {"enabled": True})
+        _run_tool("accessibility.set_touch_indicator_enhanced", {"enabled": True})
+        return
+    if normalized in ("touch indicator darker off", "make touch circle darker off"):
+        _run_tool("accessibility.set_touch_indicator_enhanced", {"enabled": False})
+        return
+
+
+    # -------------------------
+    # UI Automation (UIA)
+    # -------------------------
+    if normalized in (
+        "uia status",
+        "uia get status",
+        "uia state",
+        "ui automation status",
+        "ui automation",
+        "uia",
+    ):
+        _run_tool("uia.get_status", {})
+        return
+
 
 
     # -------------------------

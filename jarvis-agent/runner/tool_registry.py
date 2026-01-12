@@ -112,6 +112,23 @@ from .tools_accessibility import (
     accessibility_set_dismiss_notifications_after,
 )
 
+from .tools_accessibility_mouse_touch import (
+    accessibility_get_mouse_touch_state,
+    accessibility_set_mouse_pointer_style,
+    accessibility_set_mouse_pointer_color,
+    accessibility_set_mouse_pointer_size,
+    accessibility_set_mouse_indicator,
+    accessibility_set_mouse_pointer_trails,
+    accessibility_set_mouse_pointer_trails_length,
+    accessibility_set_mouse_pointer_shadow,
+    accessibility_set_touch_indicator,
+    accessibility_set_touch_indicator_enhanced,
+)
+
+
+
+
+
 
 
 
@@ -220,7 +237,6 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
 
     "network.list_wifi_networks": network_list_wifi_networks,
 
-    "network.list_wifi_networks": network_list_wifi_networks,
     "network.get_data_usage_total": network_get_data_usage_total,
     "network.get_data_usage_current_wifi": network_get_data_usage_current_wifi,
     "network.get_connection_properties": network_get_connection_properties,
@@ -249,6 +265,25 @@ TOOL_FUNCS: Dict[str, Callable[[Dict[str, Any]], Dict[str, Any]]] = {
     "accessibility.set_dismiss_notifications_after": accessibility_set_dismiss_notifications_after,
 
 
+    # ----- Accessibility: Mouse pointer & touch -----
+    "accessibility.get_mouse_touch_state": accessibility_get_mouse_touch_state,
+    "accessibility.set_mouse_pointer_style": accessibility_set_mouse_pointer_style,
+    "accessibility.set_mouse_pointer_color": accessibility_set_mouse_pointer_color,
+    "accessibility.set_mouse_pointer_size": accessibility_set_mouse_pointer_size,
+    "accessibility.set_mouse_indicator": accessibility_set_mouse_indicator,
+    "accessibility.set_mouse_pointer_trails": accessibility_set_mouse_pointer_trails,
+    "accessibility.set_mouse_pointer_trails_length": accessibility_set_mouse_pointer_trails_length,
+    "accessibility.set_mouse_pointer_shadow": accessibility_set_mouse_pointer_shadow,
+    "accessibility.set_touch_indicator": accessibility_set_touch_indicator,
+    "accessibility.set_touch_indicator_enhanced": accessibility_set_touch_indicator_enhanced,
+
+    # Compatibility aliases (older internal tool names)
+    "accessibility.set_pointer_trails": accessibility_set_mouse_pointer_trails,
+    "accessibility.set_pointer_shadow": accessibility_set_mouse_pointer_shadow,
+
+
+
+
 
 
 }
@@ -262,5 +297,11 @@ def capabilities() -> Dict[str, Any]:
     }
 
 def run_tool(name: str, params: Dict[str, Any]) -> Dict[str, Any]:
-    return TOOL_FUNCS[name](params)
+    res = TOOL_FUNCS[name](params)
+
+    # Normalize tool outputs so the agent always receives {"result": ...}
+    if isinstance(res, dict) and "result" in res:
+        return res
+    return {"result": res}
+
 

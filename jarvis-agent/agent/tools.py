@@ -227,7 +227,7 @@ TOOLS: Dict[str, Tool] = {
 
 # ---- Runner-backed tools (MK2) ----
 from .runner_client import RunnerClient
-from .runner_manager import ensure_runner_started
+from .runner_manager import ensure_runner_started, restart_runner
 from .policy import Policy
 
 _policy = Policy.load()
@@ -376,6 +376,14 @@ TOOLS.update({
         risk=RiskLevel.HIGH,
         func=relaunch_runner_elevated,
     ),
+    
+    "runner.restart": Tool(
+    name="runner.restart",
+    description="Restart the runner process (best effort). Useful to recover from a stuck/elevated runner.",
+    risk=RiskLevel.HIGH,
+    func=lambda params: (restart_runner() or {"result": {"restarted": True}}),
+    ),
+
     "bluetooth.get_state": Tool(
         name="bluetooth.get_state",
         description="Read Bluetooth radio state (best effort).",
@@ -802,6 +810,71 @@ TOOLS.update({
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("accessibility.set_dismiss_notifications_after"),
     ),
+        # ----- Accessibility: Mouse pointer & touch -----
+    "accessibility.get_mouse_touch_state": Tool(
+        name="accessibility.get_mouse_touch_state",
+        description="Get mouse pointer and touch accessibility settings (style, size, trails, indicator, touch feedback).",
+        risk=RiskLevel.LOW,
+        func=_runner_tool("accessibility.get_mouse_touch_state"),
+    ),
+
+    "accessibility.set_mouse_pointer_style": Tool(
+        name="accessibility.set_mouse_pointer_style",
+        description="Set mouse pointer style: white/black/inverted/custom (optional custom color).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_pointer_style"),
+    ),
+    "accessibility.set_mouse_pointer_color": Tool(
+        name="accessibility.set_mouse_pointer_color",
+        description="Set mouse pointer custom color (purple/lime/yellow/gold/pink/turquoise/green).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_pointer_color"),
+    ),
+    "accessibility.set_mouse_pointer_size": Tool(
+        name="accessibility.set_mouse_pointer_size",
+        description="Set mouse pointer size (best-effort range 1–15).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_pointer_size"),
+    ),
+
+    "accessibility.set_mouse_indicator": Tool(
+        name="accessibility.set_mouse_indicator",
+        description="Toggle mouse indicator (Ctrl key circle).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_indicator"),
+    ),
+    "accessibility.set_mouse_pointer_trails": Tool(
+        name="accessibility.set_mouse_pointer_trails",
+        description="Toggle mouse pointer trails (optional length).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_pointer_trails"),
+    ),
+    "accessibility.set_mouse_pointer_trails_length": Tool(
+        name="accessibility.set_mouse_pointer_trails_length",
+        description="Set mouse pointer trails length (1–20).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_pointer_trails_length"),
+    ),
+    "accessibility.set_mouse_pointer_shadow": Tool(
+        name="accessibility.set_mouse_pointer_shadow",
+        description="Toggle mouse pointer shadow.",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_mouse_pointer_shadow"),
+    ),
+
+    "accessibility.set_touch_indicator": Tool(
+        name="accessibility.set_touch_indicator",
+        description="Toggle touch indicator (touch circle).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_touch_indicator"),
+    ),
+    "accessibility.set_touch_indicator_enhanced": Tool(
+        name="accessibility.set_touch_indicator_enhanced",
+        description="Toggle 'make the circle darker and larger' (requires touch indicator ON).",
+        risk=RiskLevel.MEDIUM,
+        func=_runner_tool("accessibility.set_touch_indicator_enhanced"),
+    ),
+
 
 
 
