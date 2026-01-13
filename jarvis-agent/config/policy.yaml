@@ -23,6 +23,7 @@ allow_domains:
   - runner.restart
   - logs
   - code
+  - fs
 
 
 
@@ -109,6 +110,12 @@ allowed_domains:
   - logs.summarize_tail
   - code.read_file
   - code.search
+
+  - fs.list_dir
+  - fs.stat
+  - fs.mkdir
+  - fs.copy
+  - fs.move
 
 
 

@@ -137,6 +137,30 @@ def _format_tool_output(tool_name: str, out: Any) -> Optional[str]:
                 txt = m.get("text", "")
                 lines.append(f"    - line {ln}: {txt}")
         return "\n".join(lines)
+    
+    # -------- fs.* --------
+    if tool_name == "fs.list_dir":
+        items = result.get("items", [])
+        path = result.get("path", "workspace")
+        if not items:
+            return f"Jarvis: {path} is empty."
+        lines = [f"Jarvis: Files in {path}:"]
+        for i, it in enumerate(items, start=1):
+            t = it.get("type", "?")
+            name = it.get("name", "?")
+            lines.append(f"  {i}. [{t}] {name}")
+        return "\n".join(lines)
+
+    if tool_name == "fs.stat":
+        p = result.get("path", "?")
+        t = result.get("type", "?")
+        sz = result.get("size_bytes", 0)
+        mod = result.get("modified", "?")
+        return f"Jarvis: {p}\n  type: {t}\n  size: {sz} bytes\n  modified: {mod}"
+
+    if tool_name in ("fs.mkdir", "fs.copy", "fs.move"):
+        return f"Jarvis: ✅ {tool_name} complete: {result}"
+
 
     return None
 
@@ -184,6 +208,8 @@ GLOBAL_REPLACEMENTS: list[tuple[str, str]] = [
 
     # "set X to Y" → "X Y" (helps tons of patterns)
     (r"^set\s+(.+?)\s+to\s+(.+)$", r"\1 \2"),
+
+    (r"^list file$", "list files"),
 ]
 
 
@@ -774,6 +800,8 @@ def handle_user_message(user_message: str) -> None:
 
     text_lower = raw.strip().lower()
     normalized = _resolve_command(raw)
+    norm = _apply_global_replacements(_normalize(raw))
+
 
 
     # -------------------------
@@ -1784,6 +1812,23 @@ def handle_user_message(user_message: str) -> None:
         where = COMMON_FILES.get(where, where)
         return _run_tool("code.search", {"query": query, "path": where})
 
+
+    m = re.match(r"^read\s+(.+)\s+(\d+)$", normalized)
+    if m:
+        path = m.group(1).strip()
+        max_lines = int(m.group(2))
+        path = COMMON_FILES.get(path, path)
+        return _run_tool("code.read_file", {"path": path, "max_lines": max_lines, "start_line": 1})
+    
+    m = re.match(r"^start\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.list_dir", {"path": m.group(1)})
+
+    if norm == "list file":
+        return _run_tool("fs.list_dir", {"path": "."})
+
+
+
     # -----------------------------
     # Safer hallucination prevention
     # -----------------------------
@@ -1796,6 +1841,37 @@ def handle_user_message(user_message: str) -> None:
     if any(w in normalized for w in ("read", "open", "find", "search")) and any(ext in normalized for ext in (".py", ".yaml", "core.py", "tools.py", "models.py", "policy.yaml")):
         print('Jarvis: I can help with code. Try: `open core.py`, `read tools.py 80`, `find "load_model_roles"`, `find "RunnerClient" in tools.py`.')
         return None
+
+    # -------------------------
+    # MK3.3 FS shortcuts
+    # -------------------------
+    if norm in ("list files", "ls", "dir", "files"):
+        return _run_tool("fs.list_dir", {"path": "."})
+
+    m = re.match(r"^ls\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.list_dir", {"path": m.group(1)})
+
+    m = re.match(r"^stat\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.stat", {"path": m.group(1)})
+
+    m = re.match(r"^mkdir\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.mkdir", {"path": m.group(1)})
+
+    m = re.match(r"^copy\s+(.+?)\s+to\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.copy", {"src": m.group(1), "dst": m.group(2)})
+
+    m = re.match(r"^move\s+(.+?)\s+to\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.move", {"src": m.group(1), "dst": m.group(2)})
+    
+    m = re.match(r"^start\s+(.+)$", norm)
+    if m:
+        return _run_tool("fs.list_dir", {"path": m.group(1)})
+
 
 
 

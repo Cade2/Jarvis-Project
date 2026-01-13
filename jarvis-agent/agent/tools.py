@@ -17,6 +17,10 @@ from datetime import datetime
 from collections import Counter
 from typing import List, Dict, Any, Tuple
 
+import shutil
+from datetime import datetime
+from pathlib import Path
+from typing import List
 
 
 from .safety import Tool, RiskLevel
@@ -172,6 +176,7 @@ def _safe_under_repo(p: Path) -> Path:
     if root not in resolved.parents and resolved != root:
         raise ValueError(f"Path '{p}' is outside the repo root.")
     return resolved
+
 
 def logs_list(params: Dict[str, Any] = None):
     """
@@ -474,6 +479,158 @@ def code_search(params: Dict[str, Any]):
             "matches": matches,
         }
     }
+
+
+# ---- MK3.3: Guarded filesystem tools (workspace sandbox) ----
+
+def _workspace_root() -> Path:
+    return _repo_root() / "workspace"
+
+def _safe_under_workspace(p: Path) -> Path:
+    """
+    Ensure p resolves inside workspace/ (prevents reading arbitrary files).
+    """
+    root = _workspace_root().resolve()
+    resolved = (root / p).resolve() if not p.is_absolute() else p.resolve()
+    if root not in resolved.parents and resolved != root:
+        raise ValueError(f"Path '{p}' is outside workspace/.")
+    return resolved
+
+def fs_list_dir(params: Dict[str, Any] = None):
+    """
+    List files/folders inside workspace (default: workspace root).
+    Params: path (optional), show_hidden (optional bool)
+    """
+    params = params or {}
+    rel = params.get("path", ".")
+    show_hidden = bool(params.get("show_hidden", False))
+
+    try:
+        base = _safe_under_workspace(Path(rel))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not base.exists():
+        return {"error": f"Path not found: {base}"}
+    if not base.is_dir():
+        return {"error": f"Not a directory: {base}"}
+
+    items = []
+    for child in sorted(base.iterdir(), key=lambda x: (not x.is_dir(), x.name.lower())):
+        name = child.name
+        if not show_hidden and name.startswith("."):
+            continue
+        st = child.stat()
+        items.append({
+            "name": name,
+            "type": "dir" if child.is_dir() else "file",
+            "size_bytes": st.st_size if child.is_file() else 0,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+        })
+
+    return {"result": {"path": str(base.relative_to(_repo_root())), "items": items}}
+
+def fs_stat(params: Dict[str, Any]):
+    """
+    Stat a file/folder inside workspace.
+    Params: path (required)
+    """
+    params = params or {}
+    rel = params.get("path")
+    if not rel:
+        return {"error": "Missing 'path'."}
+
+    try:
+        p = _safe_under_workspace(Path(rel))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not p.exists():
+        return {"error": f"Path not found: {p}"}
+
+    st = p.stat()
+    return {
+        "result": {
+            "path": str(p.relative_to(_repo_root())),
+            "type": "dir" if p.is_dir() else "file",
+            "size_bytes": st.st_size if p.is_file() else 0,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+        }
+    }
+
+def fs_mkdir(params: Dict[str, Any]):
+    """
+    Create a folder inside workspace.
+    Params: path (required)
+    """
+    params = params or {}
+    rel = params.get("path")
+    if not rel:
+        return {"error": "Missing 'path'."}
+
+    try:
+        p = _safe_under_workspace(Path(rel))
+    except Exception as e:
+        return {"error": str(e)}
+
+    p.mkdir(parents=True, exist_ok=True)
+    return {"result": {"created": True, "path": str(p.relative_to(_repo_root()))}}
+
+def fs_copy(params: Dict[str, Any]):
+    """
+    Copy a file (or folder) inside workspace.
+    Params: src (required), dst (required)
+    """
+    params = params or {}
+    src = params.get("src")
+    dst = params.get("dst")
+    if not src or not dst:
+        return {"error": "Missing 'src' or 'dst'."}
+
+    try:
+        srcp = _safe_under_workspace(Path(src))
+        dstp = _safe_under_workspace(Path(dst))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not srcp.exists():
+        return {"error": f"Source not found: {srcp}"}
+
+    if srcp.is_dir():
+        if dstp.exists():
+            return {"error": "Destination already exists for directory copy."}
+        shutil.copytree(srcp, dstp)
+    else:
+        dstp.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(srcp, dstp)
+
+    return {"result": {"copied": True, "src": str(srcp.relative_to(_repo_root())), "dst": str(dstp.relative_to(_repo_root()))}}
+
+def fs_move(params: Dict[str, Any]):
+    """
+    Move/rename a file/folder inside workspace.
+    Params: src (required), dst (required)
+    """
+    params = params or {}
+    src = params.get("src")
+    dst = params.get("dst")
+    if not src or not dst:
+        return {"error": "Missing 'src' or 'dst'."}
+
+    try:
+        srcp = _safe_under_workspace(Path(src))
+        dstp = _safe_under_workspace(Path(dst))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not srcp.exists():
+        return {"error": f"Source not found: {srcp}"}
+
+    dstp.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(srcp), str(dstp))
+
+    return {"result": {"moved": True, "src": str(srcp.relative_to(_repo_root())), "dst": str(dstp.relative_to(_repo_root()))}}
+
 
 
 
@@ -1240,6 +1397,38 @@ TOOLS.update({
         description="Toggle 'make the circle darker and larger' (requires touch indicator ON).",
         risk=RiskLevel.MEDIUM,
         func=_runner_tool("accessibility.set_touch_indicator_enhanced"),
+    ),
+
+    # ----- MK3.3 Filesystem (workspace sandbox) -----
+    "fs.list_dir": Tool(
+        name="fs.list_dir",
+        description="List files/folders inside workspace/ (safe sandbox).",
+        risk=RiskLevel.READ_ONLY,
+        func=fs_list_dir,
+    ),
+    "fs.stat": Tool(
+        name="fs.stat",
+        description="Show file/folder info inside workspace/.",
+        risk=RiskLevel.READ_ONLY,
+        func=fs_stat,
+    ),
+    "fs.mkdir": Tool(
+        name="fs.mkdir",
+        description="Create a folder inside workspace/.",
+        risk=RiskLevel.MEDIUM,
+        func=fs_mkdir,
+    ),
+    "fs.copy": Tool(
+        name="fs.copy",
+        description="Copy a file/folder inside workspace/.",
+        risk=RiskLevel.MEDIUM,
+        func=fs_copy,
+    ),
+    "fs.move": Tool(
+        name="fs.move",
+        description="Move/rename a file/folder inside workspace/.",
+        risk=RiskLevel.HIGH,
+        func=fs_move,
     ),
 
 
