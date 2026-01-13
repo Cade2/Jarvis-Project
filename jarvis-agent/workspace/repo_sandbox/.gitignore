@@ -1,0 +1,35 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# --- Logs ---
+logs/*.log
+audit.log
+
+# --- Workspace sandbox (generated/test artifacts) ---
+workspace/repo_sandbox/
+workspace/patches/*.diff
+workspace/runs/
+workspace/state.json
+
+# Keep folder structure (allow .gitkeep)
+!workspace/**/.gitkeep
+    
+# --- Jarvis generated/runtime ---
+/workspace/
+/logs/
+/audit.log
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+
+# Local IDE
+.vscode/
+.idea/

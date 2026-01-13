@@ -1,0 +1,15 @@
+{
+  "models": {
+    "general": { "provider": "ollama", "name": "llama3.1:8b" },
+    "coder": { "provider": "ollama", "name": "qwen2.5-coder:14b" },
+    "research": { "provider": "ollama", "name": "qwen2.5:14b-instruct-q4_K_M" }
+  },
+  "ollama": {
+    "host": "http://127.0.0.1:11434"
+  },
+  "generation": {
+    "general": { "num_predict": 120, "temperature": 0.4 },
+    "coder": { "num_predict": 220, "temperature": 0.2 },
+    "research": { "num_predict": 350, "temperature": 0.3 }
+  }
+}

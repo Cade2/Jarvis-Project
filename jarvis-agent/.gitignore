@@ -1,0 +1,22 @@
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.venv/
+venv/
+
+# --- OS / IDE ---
+.vscode/
+.idea/
+
+# --- Env/secrets ---
+.env
+
+# --- Jarvis runtime output (actual paths) ---
+jarvis-agent/logs/
+jarvis-agent/workspace/
+
+# --- If you want to keep folder structure with .gitkeep ---
+!jarvis-agent/workspace/**/.gitkeep
