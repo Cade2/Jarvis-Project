@@ -25,6 +25,113 @@ LLM_ROUTER_TIMEOUT_SECONDS = 6
 LLM_ROUTER_ENABLED = True
 
 
+def _format_tool_output(tool_name: str, out: Any) -> Optional[str]:
+    """
+    Return a nice human-readable string for specific tools.
+    If None, core will fall back to the default raw output.
+    """
+    if out is None:
+        return None
+
+    # Common structure: {"result": {...}} or {"error": "..."}
+    if isinstance(out, dict) and "error" in out:
+        return f"Jarvis: ❌ {out['error']}"
+
+    result = out.get("result") if isinstance(out, dict) else None
+    if result is None:
+        return None
+
+    # -------- logs.* --------
+    if tool_name == "logs.list":
+        logs = result.get("logs", [])
+        if not logs:
+            return "Jarvis: No audit logs found yet."
+        lines = ["Jarvis: Recent audit logs:"]
+        for i, item in enumerate(logs, start=1):
+            name = item.get("name", "?")
+            mod = item.get("modified", "?")
+            size = item.get("size_bytes", 0)
+            kb = round(size / 1024, 1)
+            lines.append(f"  {i}. {name}  ({mod}, {kb} KB)")
+        return "\n".join(lines)
+
+    if tool_name in ("logs.last", "logs.tail"):
+        file_ = result.get("file", "?")
+        lines_list = result.get("lines", [])
+        if not lines_list:
+            return f"Jarvis: {file_} is empty."
+        header = f"Jarvis: Tail of {file_} ({len(lines_list)} lines):"
+        body = "\n".join(f"  {ln}" for ln in lines_list)
+        return f"{header}\n{body}"
+
+    if tool_name == "logs.summarize_tail":
+        file_ = result.get("file", "?")
+        summary = result.get("summary", {})
+        counts = summary.get("counts", {})
+        notes = summary.get("notes", [])
+        top = summary.get("top_planned_tools", [])
+        preview = result.get("tail_preview", [])
+
+        lines = [f"Jarvis: Log summary for {file_}:"]
+        lines.append("  Counts:")
+        lines.append(f"    - tracebacks: {counts.get('traceback', 0)}")
+        lines.append(f"    - errors: {counts.get('error', 0)}")
+        lines.append(f"    - exceptions: {counts.get('exception', 0)}")
+        lines.append(f"    - policy blocks: {counts.get('policy_blocks', 0)}")
+        lines.append(f"    - tool calls: {counts.get('tool_calls', 0)}")
+
+        if top:
+            lines.append("  Top planned tools:")
+            for item in top:
+                lines.append(f"    - {item.get('tool')} ({item.get('count')})")
+
+        if notes:
+            lines.append("  Notes:")
+            for n in notes:
+                lines.append(f"    - {n}")
+
+        if preview:
+            lines.append("  Tail preview:")
+            for ln in preview:
+                lines.append(f"    {ln}")
+
+        return "\n".join(lines)
+
+    # -------- code.* --------
+    if tool_name == "code.read_file":
+        path = result.get("path", "?")
+        lines_list = result.get("lines", [])
+        if not lines_list:
+            return f"Jarvis: File {path} is empty."
+        body = "\n".join(lines_list)
+        return f"Jarvis: {path}\n\n{body}"
+
+    if tool_name == "code.search":
+        query = result.get("query", "?")
+        path = result.get("path", "?")
+        matches = result.get("matches", [])
+        scanned = result.get("files_scanned", 0)
+
+        if not matches:
+            return f"Jarvis: No matches for '{query}' in {path} (scanned {scanned} files)."
+
+        # group by file
+        grouped: Dict[str, list] = {}
+        for m in matches:
+            grouped.setdefault(m.get("file", "?"), []).append(m)
+
+        lines = [f"Jarvis: Search results for '{query}' in {path} (scanned {scanned} files):"]
+        for file_, ms in grouped.items():
+            lines.append(f"  {file_}:")
+            for m in ms[:20]:
+                ln = m.get("line", "?")
+                txt = m.get("text", "")
+                lines.append(f"    - line {ln}: {txt}")
+        return "\n".join(lines)
+
+    return None
+
+
 # -------------------------
 # Normalization + Aliases
 # -------------------------
@@ -438,13 +545,22 @@ def _run_tool(tool_name: str, params: Dict[str, Any]) -> Any:
     try:
         result = tool.func(params)
         log_action(tool, params, "success")
+
         if result is not None:
-            print(f"Jarvis: Tool returned: {result}")
+            pretty = _format_tool_output(tool_name, result)
+            if pretty:
+                print(pretty)
+            else:
+                print(f"Jarvis: Tool returned: {result}")
+
         return result
+
     except Exception as exc:
         print(f"Jarvis: Something went wrong while executing the tool: {exc}")
         log_action(tool, params, f"error: {exc}")
         return None
+
+
 
 
 def _extract_when_from_text(text: str) -> str:
