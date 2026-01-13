@@ -21,6 +21,8 @@ allow_domains:
   - gaming
   - accessibility
   - runner.restart
+  - logs
+  - code
 
 
 
@@ -100,6 +102,14 @@ allowed_domains:
   - accessibility.set_mouse_pointer_shadow
   - accessibility.set_touch_indicator
   - accessibility.set_touch_indicator_enhanced
+
+  - logs.list
+  - logs.tail
+  - logs.last
+  - logs.summarize_tail
+  - code.read_file
+  - code.search
+
 
 
 

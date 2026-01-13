@@ -1549,6 +1549,79 @@ def handle_user_message(user_message: str) -> None:
         return
 
 
+    # ---- MK3.2: deterministic routing for logs + code introspection ----
+    # Put this BEFORE the final "chat" fallback.
+
+    # 1) Logs: list recent logs
+    if normalized in ("list logs", "list recent logs", "recent logs", "show logs", "logs"):
+        return _run_tool("logs.list", {"limit": 10})
+
+    # 2) Logs: show last N lines of the current log
+    m = re.match(r"^show last (\d+)\s+lines of the current log$", normalized)
+    if m:
+        return _run_tool("logs.last", {"lines": int(m.group(1))})
+
+    m = re.match(r"^show last (\d+)\s+lines of (the )?current session log$", normalized)
+    if m:
+        return _run_tool("logs.last", {"lines": int(m.group(1))})
+
+    m = re.match(r"^tail (the )?current log( (\d+))?$", normalized)
+    if m:
+        lines = int(m.group(3) or 50)
+        return _run_tool("logs.last", {"lines": lines})
+
+    # 3) Logs: summarize last N lines of the current log
+    m = re.match(r"^summari[sz]e the last (\d+)\s+lines of the current log$", normalized)
+    if m:
+        return _run_tool("logs.summarize_tail", {"lines": int(m.group(1))})
+
+    m = re.match(r"^summari[sz]e (the )?current log( (\d+))?$", normalized)
+    if m:
+        lines = int(m.group(3) or 80)
+        return _run_tool("logs.summarize_tail", {"lines": lines})
+
+    # 4) Logs: tail or summarize a specific log file
+    m = re.match(r"^(tail|show)\s+log\s+(.+?)\s+(\d+)$", normalized)
+    if m:
+        file_ = m.group(2).strip()
+        lines = int(m.group(3))
+        return _run_tool("logs.tail", {"file": file_, "lines": lines})
+
+    m = re.match(r"^summari[sz]e\s+log\s+(.+?)\s+(\d+)$", normalized)
+    if m:
+        file_ = m.group(1).strip()
+        lines = int(m.group(2))
+        return _run_tool("logs.summarize_tail", {"file": file_, "lines": lines})
+
+    # 5) Code: read file phrasing like "read agent/core.py first 80 lines"
+    m = re.match(r"^read\s+(.+?)\s+first\s+(\d+)\s+lines$", normalized)
+    if m:
+        path = m.group(1).strip()
+        max_lines = int(m.group(2))
+        return _run_tool("code.read_file", {"path": path, "max_lines": max_lines, "start_line": 1})
+
+    # Alternative phrasing: "read file agent/core.py 80"
+    m = re.match(r"^(read|open)\s+file\s+(.+?)\s+(\d+)$", normalized)
+    if m:
+        path = m.group(2).strip()
+        max_lines = int(m.group(3))
+        return _run_tool("code.read_file", {"path": path, "max_lines": max_lines, "start_line": 1})
+
+    # 6) Code: search phrasing like 'search for "load_model_roles" in agent'
+    m = re.match(r'^search for "(.*?)"\s+in\s+(.+)$', normalized)
+    if m:
+        query = m.group(1).strip()
+        path = m.group(2).strip()
+        return _run_tool("code.search", {"query": query, "path": path})
+
+    # Alternative: search code for X in Y
+    m = re.match(r"^search code for (.+?)\s+in\s+(.+)$", normalized)
+    if m:
+        query = m.group(1).strip().strip('"')
+        path = m.group(2).strip()
+        return _run_tool("code.search", {"query": query, "path": path})
+
+
     # -------------------------
     # UI Automation (UIA)
     # -------------------------

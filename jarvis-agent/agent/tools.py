@@ -9,6 +9,11 @@ from .runner_client import RunnerClient
 from .elevation import relaunch_runner_elevated
 from .safety import Tool, RiskLevel
 
+import os
+import re
+from datetime import datetime
+
+
 
 from .safety import Tool, RiskLevel
 
@@ -148,6 +153,278 @@ def show_activity(params: Dict[str, Any]):
 
 
 
+# ---- MK3.2: Read-only introspection (logs + code) ----
+
+def _repo_root() -> Path:
+    # agent/tools.py -> agent/ -> jarvis-agent/
+    return Path(__file__).resolve().parent.parent
+
+def _safe_under_repo(p: Path) -> Path:
+    """
+    Ensure p resolves inside repo root (prevents reading arbitrary files).
+    """
+    root = _repo_root()
+    resolved = (root / p).resolve() if not p.is_absolute() else p.resolve()
+    if root not in resolved.parents and resolved != root:
+        raise ValueError(f"Path '{p}' is outside the repo root.")
+    return resolved
+
+def logs_list(params: Dict[str, Any] = None):
+    """
+    List recent audit logs in ./logs (newest first).
+    """
+    params = params or {}
+    limit = int(params.get("limit", 10))
+
+    logs_dir = _repo_root() / "logs"
+    if not logs_dir.exists():
+        return {"result": {"logs": [], "note": "No logs/ folder found yet."}}
+
+    files = sorted(
+        logs_dir.glob("audit_*.log"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True
+    )[:limit]
+
+    out = []
+    for f in files:
+        st = f.stat()
+        out.append({
+            "name": f.name,
+            "modified": datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+            "size_bytes": st.st_size,
+        })
+
+    return {"result": {"logs": out}}
+
+def logs_tail(params: Dict[str, Any]):
+    """
+    Tail a specific log file (by name or path) and return last N lines.
+    """
+    params = params or {}
+    lines = int(params.get("lines", 50))
+    file_ = params.get("file") or params.get("path")
+
+    if not file_:
+        return {"error": "Missing 'file' (e.g. 'audit_20260113_014831.log' or 'logs/audit_....log')."}
+
+    # allow: "audit_....log" or "logs/audit_....log"
+    p = Path(file_)
+    if p.parent == Path("."):
+        p = Path("logs") / p
+
+    try:
+        p = _safe_under_repo(p)
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not p.exists():
+        return {"error": f"Log file not found: {p}"}
+
+    try:
+        with open(p, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+    except Exception as e:
+        return {"error": f"Failed to read log file: {e}"}
+
+    # remove header lines
+    body = [ln.rstrip("\n") for ln in all_lines if not ln.strip().startswith("#")]
+    tail = body[-lines:] if lines > 0 else body
+
+    return {"result": {"file": str(p.relative_to(_repo_root())), "lines": tail}}
+
+def logs_last(params: Dict[str, Any] = None):
+    """
+    Tail the current session audit log (uses get_audit_path()).
+    """
+    params = params or {}
+    lines = int(params.get("lines", 50))
+    audit_file = get_audit_path()
+
+    if not audit_file.exists():
+        return {"error": "No audit file found for this session yet."}
+
+    try:
+        with open(audit_file, "r", encoding="utf-8", errors="replace") as f:
+            all_lines = f.readlines()
+    except Exception as e:
+        return {"error": f"Failed to read audit file: {e}"}
+
+    body = [ln.rstrip("\n") for ln in all_lines if not ln.strip().startswith("#")]
+    tail = body[-lines:] if lines > 0 else body
+
+    return {"result": {"file": str(audit_file), "lines": tail}}
+
+def logs_summarize_tail(params: Dict[str, Any]):
+    """
+    Deterministic summary of last N lines (pattern spotting).
+    Read-only and safe (no LLM calls yet).
+    """
+    params = params or {}
+    lines_n = int(params.get("lines", 80))
+    file_ = params.get("file") or params.get("path")  # optional
+    # use logs_last if no file specified
+    if not file_:
+        tail_res = logs_last({"lines": lines_n})
+    else:
+        tail_res = logs_tail({"lines": lines_n, "file": file_})
+
+    if "error" in tail_res:
+        return tail_res
+
+    lines = tail_res["result"]["lines"]
+    joined = "\n".join(lines)
+
+    counts = {
+        "traceback": len(re.findall(r"Traceback \(most recent call last\)", joined)),
+        "error": len(re.findall(r"\bERROR\b", joined, flags=re.IGNORECASE)),
+        "exception": len(re.findall(r"\bException\b", joined)),
+        "policy_blocks": len(re.findall(r"Policy blocks tool", joined)),
+        "tool_calls": len(re.findall(r"Tool returned:", joined)),
+    }
+
+    # crude tool name extraction from "I plan to use 'tool.name'"
+    planned = re.findall(r"I plan to use '([^']+)'", joined)
+    top_planned = {}
+    for t in planned:
+        top_planned[t] = top_planned.get(t, 0) + 1
+    top_planned = sorted(top_planned.items(), key=lambda x: x[1], reverse=True)[:5]
+
+    note = []
+    if counts["traceback"] > 0 or counts["exception"] > 0:
+        note.append("Possible crash/exception detected.")
+    if counts["policy_blocks"] > 0:
+        note.append("Policy blocks detected (tool not allowed).")
+
+    return {
+        "result": {
+            "file": tail_res["result"]["file"],
+            "summary": {
+                "counts": counts,
+                "top_planned_tools": [{"tool": k, "count": v} for k, v in top_planned],
+                "notes": note,
+            },
+            "tail_preview": lines[-15:] if len(lines) > 15 else lines
+        }
+    }
+
+def code_read_file(params: Dict[str, Any]):
+    """
+    Read a file inside the repo (bounded).
+    Params: path (required), max_lines (default 200), start_line (default 1)
+    """
+    params = params or {}
+    path = params.get("path")
+    if not path:
+        return {"error": "Missing 'path' (e.g. 'agent/core.py')."}
+
+    max_lines = int(params.get("max_lines", 200))
+    start_line = int(params.get("start_line", 1))
+
+    try:
+        p = _safe_under_repo(Path(path))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not p.exists() or not p.is_file():
+        return {"error": f"File not found: {p}"}
+
+    try:
+        with open(p, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.readlines()
+    except Exception as e:
+        return {"error": f"Failed to read file: {e}"}
+
+    # 1-based start_line
+    start_idx = max(start_line - 1, 0)
+    chunk = lines[start_idx:start_idx + max_lines]
+
+    numbered = []
+    for i, ln in enumerate(chunk, start=start_idx + 1):
+        numbered.append(f"{i:>4} | {ln.rstrip()}")
+
+    return {"result": {"path": str(p.relative_to(_repo_root())), "lines": numbered}}
+
+def code_search(params: Dict[str, Any]):
+    """
+    Search for a query in a file or directory inside the repo (bounded).
+    Params:
+      query (required)
+      path (default 'agent')
+      max_files (default 50)
+      max_matches (default 50)
+      case_sensitive (default false)
+    """
+    params = params or {}
+    query = params.get("query")
+    if not query:
+        return {"error": "Missing 'query'."}
+
+    base = params.get("path", "agent")
+    max_files = int(params.get("max_files", 50))
+    max_matches = int(params.get("max_matches", 50))
+    case_sensitive = bool(params.get("case_sensitive", False))
+
+    try:
+        base_path = _safe_under_repo(Path(base))
+    except Exception as e:
+        return {"error": str(e)}
+
+    if not base_path.exists():
+        return {"error": f"Path not found: {base_path}"}
+
+    matches = []
+    files_scanned = 0
+
+    def _scan_file(fp: Path):
+        nonlocal files_scanned, matches
+        if files_scanned >= max_files or len(matches) >= max_matches:
+            return
+        files_scanned += 1
+
+        try:
+            text = fp.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            return
+
+        hay = text if case_sensitive else text.lower()
+        needle = query if case_sensitive else query.lower()
+
+        if needle not in hay:
+            return
+
+        # capture line-level matches
+        for idx, line in enumerate(text.splitlines(), start=1):
+            hline = line if case_sensitive else line.lower()
+            if needle in hline:
+                matches.append({
+                    "file": str(fp.relative_to(_repo_root())),
+                    "line": idx,
+                    "text": line.strip()[:300],
+                })
+                if len(matches) >= max_matches:
+                    return
+
+    if base_path.is_file():
+        _scan_file(base_path)
+    else:
+        for fp in base_path.rglob("*.py"):
+            _scan_file(fp)
+            if files_scanned >= max_files or len(matches) >= max_matches:
+                break
+
+    return {
+        "result": {
+            "query": query,
+            "path": str(base_path.relative_to(_repo_root())),
+            "files_scanned": files_scanned,
+            "matches": matches,
+        }
+    }
+
+
+
+
 def open_application(params: Dict[str, Any]):
     """
     Backwards-compatible wrapper that calls the MK2 runner.
@@ -222,6 +499,43 @@ TOOLS: Dict[str, Tool] = {
         risk=RiskLevel.MEDIUM,  # a bit more dangerous
         func=clear_reminders,
     ),
+        "logs.list": Tool(
+        name="logs.list",
+        description="List recent audit logs (read-only).",
+        risk=RiskLevel.READ_ONLY,
+        func=logs_list,
+    ),
+    "logs.tail": Tool(
+        name="logs.tail",
+        description="Show last N lines of a log file (read-only).",
+        risk=RiskLevel.READ_ONLY,
+        func=logs_tail,
+    ),
+    "logs.last": Tool(
+        name="logs.last",
+        description="Show last N lines of the current session log (read-only).",
+        risk=RiskLevel.READ_ONLY,
+        func=logs_last,
+    ),
+    "logs.summarize_tail": Tool(
+        name="logs.summarize_tail",
+        description="Summarize last N lines of a log file (deterministic, read-only).",
+        risk=RiskLevel.READ_ONLY,
+        func=logs_summarize_tail,
+    ),
+    "code.read_file": Tool(
+        name="code.read_file",
+        description="Read a repo file safely (bounded).",
+        risk=RiskLevel.READ_ONLY,
+        func=code_read_file,
+    ),
+    "code.search": Tool(
+        name="code.search",
+        description="Search query in repo code safely (bounded).",
+        risk=RiskLevel.READ_ONLY,
+        func=code_search,
+    ),
+
     
 }
 
