@@ -14,6 +14,10 @@ import re
 from datetime import datetime
 
 
+from collections import Counter
+from typing import List, Dict, Any, Tuple
+
+
 
 from .safety import Tool, RiskLevel
 
@@ -255,6 +259,72 @@ def logs_last(params: Dict[str, Any] = None):
 
     return {"result": {"file": str(audit_file), "lines": tail}}
 
+def _parse_audit_tail(tail_lines: List[str]) -> Tuple[Dict[str, int], List[Dict[str, Any]], List[str]]:
+    """
+    Parse lines like:
+    2026-01-13T10:25:11.914692 | logs.summarize_tail | {'lines': 120} | success
+    """
+    counts = {
+        "traceback": 0,
+        "error": 0,
+        "exception": 0,
+        "policy_blocks": 0,
+        "tool_calls": 0,
+    }
+
+    tool_counter = Counter()
+    notes: List[str] = []
+
+    for raw in tail_lines:
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+
+        # Some lines might not match perfectly; be defensive
+        parts = line.split(" | ")
+        if len(parts) >= 4:
+            tool_name = parts[1].strip()
+            outcome = parts[-1].strip().lower()
+
+            counts["tool_calls"] += 1
+            tool_counter[tool_name] += 1
+
+            if "traceback" in line.lower():
+                counts["traceback"] += 1
+            if outcome.startswith("error"):
+                counts["error"] += 1
+                notes.append(f"Error: {tool_name}")
+            if "exception" in outcome:
+                counts["exception"] += 1
+                notes.append(f"Exception: {tool_name}")
+            if "policy" in outcome:
+                counts["policy_blocks"] += 1
+                notes.append(f"Policy block: {tool_name}")
+            if "cancel" in outcome:
+                notes.append(f"Cancelled: {tool_name}")
+        else:
+            # Not in the standard format; still detect tracebacks/errors if present
+            if "traceback" in line.lower():
+                counts["traceback"] += 1
+            if "error" in line.lower():
+                counts["error"] += 1
+
+    top_tools = [
+        {"tool": name, "count": cnt}
+        for name, cnt in tool_counter.most_common(8)
+    ]
+
+    # Deduplicate notes, keep order
+    seen = set()
+    deduped_notes = []
+    for n in notes:
+        if n not in seen:
+            seen.add(n)
+            deduped_notes.append(n)
+
+    return counts, top_tools, deduped_notes
+
+
 def logs_summarize_tail(params: Dict[str, Any]):
     """
     Deterministic summary of last N lines (pattern spotting).
@@ -263,6 +333,7 @@ def logs_summarize_tail(params: Dict[str, Any]):
     params = params or {}
     lines_n = int(params.get("lines", 80))
     file_ = params.get("file") or params.get("path")  # optional
+
     # use logs_last if no file specified
     if not file_:
         tail_res = logs_last({"lines": lines_n})
@@ -272,41 +343,23 @@ def logs_summarize_tail(params: Dict[str, Any]):
     if "error" in tail_res:
         return tail_res
 
-    lines = tail_res["result"]["lines"]
-    joined = "\n".join(lines)
-
-    counts = {
-        "traceback": len(re.findall(r"Traceback \(most recent call last\)", joined)),
-        "error": len(re.findall(r"\bERROR\b", joined, flags=re.IGNORECASE)),
-        "exception": len(re.findall(r"\bException\b", joined)),
-        "policy_blocks": len(re.findall(r"Policy blocks tool", joined)),
-        "tool_calls": len(re.findall(r"Tool returned:", joined)),
-    }
-
-    # crude tool name extraction from "I plan to use 'tool.name'"
-    planned = re.findall(r"I plan to use '([^']+)'", joined)
-    top_planned = {}
-    for t in planned:
-        top_planned[t] = top_planned.get(t, 0) + 1
-    top_planned = sorted(top_planned.items(), key=lambda x: x[1], reverse=True)[:5]
-
-    note = []
-    if counts["traceback"] > 0 or counts["exception"] > 0:
-        note.append("Possible crash/exception detected.")
-    if counts["policy_blocks"] > 0:
-        note.append("Policy blocks detected (tool not allowed).")
+    tail_lines = tail_res["result"]["lines"]
+    counts, top_tools, notes = _parse_audit_tail(tail_lines)
 
     return {
         "result": {
             "file": tail_res["result"]["file"],
             "summary": {
                 "counts": counts,
-                "top_planned_tools": [{"tool": k, "count": v} for k, v in top_planned],
-                "notes": note,
+                "top_planned_tools": top_tools,
+                "notes": notes,
             },
-            "tail_preview": lines[-15:] if len(lines) > 15 else lines
+            "tail_preview": tail_lines[-15:] if len(tail_lines) > 15 else tail_lines
         }
     }
+
+
+
 
 def code_read_file(params: Dict[str, Any]):
     """
