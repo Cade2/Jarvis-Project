@@ -799,8 +799,9 @@ def handle_user_message(user_message: str) -> None:
         return
 
     text_lower = raw.strip().lower()
-    normalized = _resolve_command(raw)
-    norm = _apply_global_replacements(_normalize(raw))
+    normalized = _normalize(raw)
+    norm = _apply_global_replacements(normalized)
+
 
 
 
@@ -1843,34 +1844,37 @@ def handle_user_message(user_message: str) -> None:
         return None
 
     # -------------------------
-    # MK3.3 FS shortcuts
+    # MK3.3 FS shortcuts (workspace sandbox)
     # -------------------------
     if norm in ("list files", "ls", "dir", "files"):
         return _run_tool("fs.list_dir", {"path": "."})
 
     m = re.match(r"^ls\s+(.+)$", norm)
     if m:
-        return _run_tool("fs.list_dir", {"path": m.group(1)})
+        return _run_tool("fs.list_dir", {"path": m.group(1).strip()})
 
     m = re.match(r"^stat\s+(.+)$", norm)
     if m:
-        return _run_tool("fs.stat", {"path": m.group(1)})
+        return _run_tool("fs.stat", {"path": m.group(1).strip()})
 
     m = re.match(r"^mkdir\s+(.+)$", norm)
     if m:
-        return _run_tool("fs.mkdir", {"path": m.group(1)})
+        return _run_tool("fs.mkdir", {"path": m.group(1).strip()})
 
     m = re.match(r"^copy\s+(.+?)\s+to\s+(.+)$", norm)
     if m:
-        return _run_tool("fs.copy", {"src": m.group(1), "dst": m.group(2)})
+        return _run_tool("fs.copy", {"src": m.group(1).strip(), "dst": m.group(2).strip()})
 
     m = re.match(r"^move\s+(.+?)\s+to\s+(.+)$", norm)
     if m:
-        return _run_tool("fs.move", {"src": m.group(1), "dst": m.group(2)})
+        return _run_tool("fs.move", {"src": m.group(1).strip(), "dst": m.group(2).strip()})
     
-    m = re.match(r"^start\s+(.+)$", norm)
-    if m:
-        return _run_tool("fs.list_dir", {"path": m.group(1)})
+    # If user tries to ls/stat repo files, redirect to code tools (read-only repo)
+    if norm.startswith("ls agent") or norm.startswith("ls config") or norm.startswith("stat agent") or norm.startswith("stat config"):
+        print("Jarvis: Those paths are in the repo, not workspace. Use code tools: `open core.py` or `read agent/core.py 80` or `find \"...\" in agent/core.py`.")
+        return
+
+
 
 
 
