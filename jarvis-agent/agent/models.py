@@ -3,6 +3,7 @@ import json
 
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import socket
 
 from typing import List, Tuple, Any, Dict
 from pathlib import Path
@@ -51,9 +52,10 @@ class OllamaModel:
     Minimal Ollama client using stdlib only (no requests dependency).
     Uses /api/generate with a single prompt string.
     """
-    def __init__(self, model_name: str, host: str = "http://127.0.0.1:11434"):
+    def __init__(self, model_name: str, host: str = "http://127.0.0.1:11434", timeout_seconds: int = 600):
         self.model_name = model_name
         self.host = host.rstrip("/")
+        self.timeout_seconds = int(timeout_seconds)
 
     def chat(self, messages: List[str], max_new_tokens: int = 256, temperature: float = 0.2) -> str:
         prompt = "\n".join(messages)
@@ -79,10 +81,16 @@ class OllamaModel:
         )
 
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
                 body = resp.read().decode("utf-8")
                 obj = json.loads(body)
                 return (obj.get("response") or "").strip()
+        except (TimeoutError, socket.timeout) as e:
+            raise RuntimeError(
+                f"Ollama request timed out after {self.timeout_seconds}s for model '{self.model_name}'. "
+                "Increase config/models.json -> ollama.timeout_seconds, or reduce generation.num_predict, "
+                "or switch to a smaller coder model."
+            ) from e
         except urllib.error.URLError as e:
             raise RuntimeError(
                 "Ollama is not reachable. Make sure it's running (try: `ollama serve`) "

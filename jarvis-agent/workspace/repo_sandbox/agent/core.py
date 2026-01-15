@@ -227,204 +227,6 @@ def _apply_global_replacements(normalized: str) -> str:
 
 def _auto_alias(normalized: str) -> str:
     """
-    Convert common natural phrasings into the canonical commands your handlers expect.
-    This is where "aliases for everything" actually happens.
-    """
-    s = _apply_global_replacements(normalized)
-
-    # ---- status/state normalization ----
-    # Most of your handlers use "<thing> status" or "<thing> state".
-    # We unify a bunch of common variants.
-    status_map = {
-        "system status": "system info",
-        "system info status": "system info",
-        "storage status": "storage",
-        "disk status": "storage",
-        "drive status": "storage",
-
-        "display status": "display status",
-        "screen status": "display status",
-
-        "audio status": "audio status",
-        "sound status": "audio status",
-        "volume status": "audio status",
-
-        "bluetooth status": "bluetooth status",
-        "wifi status": "network status",
-        "network status": "network status",
-
-        "power status": "power status",
-        "battery status": "power status",
-
-        "runner status": "runner is elevated",
-        "runner elevated status": "runner is elevated",
-        "uia status": "uia status",
-
-        "vision status": "accessibility vision status",
-        "accessibility status": "accessibility vision status",
-    }
-    if s in status_map:
-        return status_map[s]
-
-    # ---- wifi/network common language ----
-    if s in ("wifi scan", "wifi networks", "nearby wifi", "list wifi", "list wifi networks"):
-        return "scan wifi"
-    if s in ("wifi scan detailed", "scan wifi detailed"):
-        return "scan wifi detailed"
-
-    # ---- on/off patterns that people naturally type ----
-    # (global replacements already changed enable/disable/turn on/off)
-    # We just align the "wifi on/off", "bluetooth on/off", etc.
-    if s == "wifi on":
-        return "wifi on"
-    if s == "wifi off":
-        return "wifi off"
-    if s == "bluetooth on":
-        return "bluetooth on"
-    if s == "bluetooth off":
-        return "bluetooth off"
-
-    # Energy saver synonyms
-    if s == "battery saver on":
-        return "energy saver on"
-    if s == "battery saver off":
-        return "energy saver off"
-    if s == "battery saver status":
-        return "energy saver status"
-
-    # ---- display scale synonyms ----
-    if s in ("scale status", "scaling status", "display scale status"):
-        return "display status"
-
-    # Default: return cleaned phrase
-    return s
-
-
-def _resolve_command(raw: str) -> str:
-    """
-    One place to normalize -> auto-alias -> manual ALIASES override.
-    Manual ALIASES wins at the end so you can force anything.
-    """
-    n = _normalize(raw)
-    n = _auto_alias(n)
-    return ALIASES.get(n, n)
-
-
-ALIASES = {
-    # runner
-    "runner elevated": "runner is elevated",
-    "runner admin": "runner is elevated",
-    "runner status": "runner is elevated",
-    "runner elevated?": "runner is elevated",
-    "is runner elevated": "runner is elevated",
-    "is runner elevated?": "runner is elevated",
-
-    # wifi
-    "wifi enable": "wifi on",
-    "enable wifi": "wifi on",
-    "turn on wifi": "wifi on",
-    "wifi disable": "wifi off",
-    "disable wifi": "wifi off",
-    "turn off wifi": "wifi off",
-
-    "wifi scan": "scan wifi",
-    "scan wifi": "scan wifi",
-    "nearby wifi": "scan wifi",
-    "wifi networks": "scan wifi",
-    "list wifi": "scan wifi",
-    "list wifi networks": "scan wifi",
-    "scan wifi detailed": "scan wifi detailed",
-    "wifi scan detailed": "scan wifi detailed",
-
-    # uia
-    "uia": "uia status",
-    "uia state": "uia status",
-    "ui automation": "uia status",
-    "ui automation status": "uia status",
-
-
-    # settings
-    "settings wifi": "open settings wifi",
-    "settings bluetooth": "open settings bluetooth",
-    "settings display": "open settings display",
-    "settings update": "open settings windows update",
-    "windows update": "open settings windows update",
-
-    # bluetooth
-    "paired devices": "list paired devices",
-    "bluetooth paired devices": "list paired devices",
-    "list bluetooth devices": "list paired devices",
-
-    # power/battery shortcuts
-    "power timeouts": "power get timeouts",
-    "timeouts": "power get timeouts",
-    "battery usage per app": "srum report",
-    "per app battery usage": "srum report",
-
-    # ----- time & language (date & time) -----
-    "time status": "date time status",
-    "date & time status": "date time status",
-    "date and time status": "date time status",
-
-    "set time automatically on": "auto time on",
-    "set time automatically off": "auto time off",
-    "turn on set time automatically": "auto time on",
-    "turn off set time automatically": "auto time off",
-    "enable set time automatically": "auto time on",
-    "disable set time automatically": "auto time off",
-
-    "set time zone automatically on": "auto timezone on",
-    "set time zone automatically off": "auto timezone off",
-    "turn on set time zone automatically": "auto timezone on",
-    "turn off set time zone automatically": "auto timezone off",
-    "enable set time zone automatically": "auto timezone on",
-    "disable set time zone automatically": "auto timezone off",
-
-    "show time and date in the system tray on": "systray time on",
-    "show time and date in the system tray off": "systray time off",
-    "show time and date in system tray on": "systray time on",
-    "show time and date in system tray off": "systray time off",
-
-    "show time in notification center on": "notification time on",
-    "show time in notification center off": "notification time off",
-
-    "sync now": "sync time",
-    "sync time now": "sync time",
-    "resync now": "sync time",
-    "resync time": "sync time",
-
-    # gaming
-    "game mode": "game mode status",
-    "game mode status": "game mode status",
-    "gaming mode": "game mode status",
-
-    "game mode on": "game mode on",
-    "turn on game mode": "game mode on",
-    "enable game mode": "game mode on",
-
-    "game mode off": "game mode off",
-    "turn off game mode": "game mode off",
-    "disable game mode": "game mode off",
-
-    # accessibility (vision)
-    "vision status": "accessibility vision status",
-    "accessibility vision status": "accessibility vision status",
-
-    "transparency effects on": "transparency effects on",
-    "transparency effects off": "transparency effects off",
-    "animation effects on": "animation effects on",
-    "animation effects off": "animation effects off",
-
-    "always show scrollbars on": "always show scrollbars on",
-    "always show scrollbars off": "always show scrollbars off",
-
-
-
-}
-
-
-def _auto_alias(normalized: str) -> str:
-    """
     Create canonical forms for commands so lots of phrasings work without
     manually listing every alias.
     """
@@ -470,6 +272,11 @@ def _auto_alias(normalized: str) -> str:
     return out
 
 
+# Optional manual alias overrides (kept for hard overrides when needed)
+ALIASES: dict[str, str] = {
+    # Example overrides (leave commented unless you need them):
+    # "pc status": "system info",
+}
 
 
 KNOWN_COMMANDS = set(ALIASES.keys()) | set(ALIASES.values()) | {
@@ -794,6 +601,203 @@ def _extract_int(t: str) -> int | None:
     return int(m.group(1)) if m else None
 
 
+# -------------------------
+# MK3.3 Dev task router
+# -------------------------
+
+_DEV_TRIGGER_RE = re.compile(
+    r"""\b(
+        fix|debug|refactor|implement|add\s+(a\s+)?feature|add\s+support|make\s+it\s+work|
+        code\s+review|cleanup|document|lint|format|optimi[sz]e|performance\s+issue|
+        stack\s*trace|traceback|exception|error\s+code|build\s+failed|test\s+failed
+    )\b""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+_DEV_SHORTCUTS = {
+    "dev status", "devmode status", "dev",
+    "sandbox reset", "dev sandbox reset", "reset sandbox",
+    "discard patch", "dev discard patch", "cancel patch",
+    "apply patch", "dev apply patch",
+    "propose patch",
+}
+
+def _is_dev_request(text_lower: str, normalized: str) -> bool:
+    # Don't intercept explicit dev shortcuts (those are handled by existing commands)
+    if normalized in _DEV_SHORTCUTS:
+        return False
+
+    # Strong signals that we're talking about code / errors
+    if "traceback" in text_lower:
+        return True
+    if "syntaxerror" in text_lower or "importerror" in text_lower or "typeerror" in text_lower:
+        return True
+    if "exception" in text_lower or "stack trace" in text_lower:
+        return True
+    if "error" in text_lower and ("line " in text_lower or "file " in text_lower):
+        return True
+
+    return bool(_DEV_TRIGGER_RE.search(text_lower))
+
+
+def _extract_repo_paths(text_in: str):
+    candidates = re.findall(r"\b(?:agent|runner|config|workspace)\\[\w\-./\\]+\b", text_in)
+    candidates += re.findall(r"\b(?:agent|runner|config|workspace)/[\w\-./]+\b", text_in)
+
+    cleaned = []
+    for p in candidates:
+        p = p.replace('\\', '/')
+        if p.startswith('workspace/'):
+            continue
+        if p not in cleaned:
+            cleaned.append(p)
+    return cleaned[:6]
+
+
+def _extract_query_tokens(user_text: str):
+    raw = user_text or ''
+    tokens = set()
+
+    for t in re.findall(r"[A-Za-z_][A-Za-z0-9_\.]{2,}", raw):
+        tl = t.lower()
+        if tl in ('jarvis', 'python', 'windows', 'please'):
+            continue
+        if len(t) >= 4:
+            tokens.add(t)
+
+    for t in list(tokens):
+        if t.lower().endswith(('error', 'exception')):
+            tokens.add(t)
+
+    return list(tokens)[:8]
+
+
+def _summarize_matches(matches, limit=25) -> str:
+    out = []
+    for m in matches[:limit]:
+        f = m.get('file', '')
+        ln = m.get('line_no', '')
+        line = m.get('line', '')
+        out.append(f"{f}:{ln}: {line}")
+    return "\n".join(out)
+
+
+def _dev_collect_context(user_text: str) -> str:
+    paths = _extract_repo_paths(user_text)
+    tokens = _extract_query_tokens(user_text)
+
+    search_blobs = []
+    read_blobs = []
+
+    for p in paths:
+        out = _run_tool('code.read_file', {'path': p, 'max_lines': 160, 'start_line': 1})
+        if out and isinstance(out, dict) and out.get('result'):
+            lines = out['result'].get('lines', [])
+            read_blobs.append(f"--- FILE: {p} ---\n" + "\n".join(lines))
+
+    base_path = 'agent'
+    if 'runner' in (user_text or '').lower():
+        base_path = 'runner'
+
+    for tok in tokens[:3]:
+        out = _run_tool('code.search', {'query': tok, 'path': base_path, 'max_files': 50, 'max_matches': 30})
+        if out and isinstance(out, dict) and out.get('result'):
+            res = out['result']
+            matches = res.get('matches', [])
+            if matches:
+                search_blobs.append(f"--- SEARCH: {tok} (in {res.get('path')}) ---\n" + _summarize_matches(matches))
+
+    context = []
+    if search_blobs:
+        context.append("\n\n".join(search_blobs))
+    if read_blobs:
+        context.append("\n\n".join(read_blobs))
+
+    return "\n\n".join(context).strip()
+
+
+def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: str = ''):
+    prompt = [
+        'You are the CODER model for the Jarvis repo.',
+        'Goal: generate a SMALL, correct unified diff (git apply compatible) to implement the requested change.',
+        'Rules:',
+        '- Output JSON ONLY.',
+        '- Schema: {"description": string, "diff": string}.',
+        "- diff MUST be a unified diff with file paths relative to repo root, like 'agent/core.py'.",
+        '- Do NOT include backticks. Do NOT include explanations outside JSON.',
+        '- Prefer minimal edits. Keep formatting consistent.',
+        '',
+        f"User request: {user_request}",
+    ]
+
+    if compile_feedback.strip():
+        prompt.append('')
+        prompt.append('Sandbox compile feedback (from previous attempt):')
+        prompt.append(compile_feedback)
+
+    if context_blob.strip():
+        prompt.append('')
+        prompt.append('Repo context:')
+        prompt.append(context_blob)
+
+    prompt.append('')
+    prompt.append('JSON:')
+
+    try:
+        raw = _coder_model.chat(prompt, max_new_tokens=1200, temperature=0.1).strip()
+    except Exception as e:
+        print(f"Jarvis: ❌ Coder model failed: {e}")
+        print("Jarvis: Tip: increase config/models.json -> ollama.timeout_seconds "
+              "or reduce generation.coder.num_predict / use a smaller coder model.")
+        return {"description": "", "diff": "", "raw": str(e)}
+    
+    obj = _extract_first_json_object(raw) or {}
+    desc = obj.get('description', '').strip()
+    diff_text = (obj.get('diff', '') or '').rstrip() + '\n' if obj.get('diff') else ''
+
+    return {'description': desc, 'diff': diff_text, 'raw': raw}
+
+
+def _handle_dev_request(user_text: str) -> None:
+    print('Jarvis: Entering Dev Mode (sandbox-first).')
+
+    context_blob = _dev_collect_context(user_text)
+
+    last_feedback = ''
+    for attempt in range(1, 4):
+        patch = _dev_generate_patch(user_text, context_blob, compile_feedback=last_feedback)
+        diff_text = patch.get('diff', '')
+
+        if not diff_text.strip():
+            print('Jarvis: I could not produce a valid diff yet. Try including the error text or file path.')
+            return
+
+        desc = patch.get('description') or f'Dev Mode patch attempt {attempt}'
+        result = _run_tool('dev.propose_patch', {'diff': diff_text, 'description': desc})
+
+        ok = False
+        feedback = ''
+        if isinstance(result, dict):
+            res = result.get('result') or {}
+            ok = bool(res.get('compileall_ok'))
+            feedback = (res.get('compileall_output_tail') or '').strip()
+
+        if ok:
+            print('Jarvis: ✅ Sandbox checks passed. If you want to apply this patch to the real repo, type: apply patch')
+            return
+
+        if not feedback:
+            print('Jarvis: Sandbox checks failed, but I could not retrieve compile output. Use `dev status` to inspect.')
+            return
+
+        print('Jarvis: Sandbox checks failed. I will attempt a fix based on the compile output.')
+        last_feedback = feedback
+
+    print('Jarvis: I tried a few times but could not get a clean sandbox pass. Use `dev status` to review the latest output.')
+
+
+
 def handle_user_message(user_message: str) -> None:
     global _PENDING_SUGGESTION
 
@@ -805,6 +809,13 @@ def handle_user_message(user_message: str) -> None:
     text_lower = raw.strip().lower()
     normalized = _normalize(raw)
     norm = _apply_global_replacements(normalized)
+
+    # -------------------------
+    # MK3.3 Dev Mode router (auto)
+    # -------------------------
+    if _is_dev_request(text_lower, normalized):
+        _handle_dev_request(raw)
+        return
 
 
 

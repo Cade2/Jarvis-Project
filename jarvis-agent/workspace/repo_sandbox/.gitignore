@@ -7,29 +7,16 @@ __pycache__/
 .venv/
 venv/
 
-# --- Logs ---
-logs/*.log
-audit.log
-
-# --- Workspace sandbox (generated/test artifacts) ---
-workspace/repo_sandbox/
-workspace/patches/*.diff
-workspace/runs/
-workspace/state.json
-
-# Keep folder structure (allow .gitkeep)
-!workspace/**/.gitkeep
-    
-# --- Jarvis generated/runtime ---
-/workspace/
-/logs/
-/audit.log
-
-# Python caches
-__pycache__/
-*.pyc
-*.pyo
-
-# Local IDE
+# --- OS / IDE ---
 .vscode/
 .idea/
+
+# --- Env/secrets ---
+.env
+
+# --- Jarvis runtime output (actual paths) ---
+jarvis-agent/logs/
+jarvis-agent/workspace/
+
+# --- If you want to keep folder structure with .gitkeep ---
+!jarvis-agent/workspace/**/.gitkeep

@@ -320,6 +320,7 @@ def dev_propose_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
         "result": {
             "pending_patch": state["pending_patch"],
             "compileall_ok": ok,
+            "compileall_output_tail": compile_out[-4000:] if isinstance(compile_out, str) else "",
             "run_log": run_log,
         }
     }
