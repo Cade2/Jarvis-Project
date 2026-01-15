@@ -1,147 +1,64 @@
-# Jarvis Project – Local AI Agent (MK1 / MK1.5)
+# Jarvis Project — Local AI Agent (MK3)
 
-This project is my attempt to build a **local, privacy-first AI assistant** that runs on my own devices and can safely control certain parts of the system.
+Jarvis is a **local, privacy-first AI agent** that can:
 
-The long-term goal is a **Jarvis-style agent** that can:
-- Chat naturally and answer questions
-- Help with coding and summarising
-- Perform actions on the device (open apps, create reminders, manage files, etc.)
-- Stay **fully local** and **safe**, with strong control over what it is allowed to do
+- Chat naturally (**General model**)
+- Help with coding (**Coder model**)
+- Help with research / summaries (**Research model**)
+- Safely run **approved system tools** on your PC via a Windows **Runner**
+- Generate and test code changes **sandbox-first** before applying them to the real repo (**Dev Mode**)
 
-This repo contains the early versions:
-
-- **MK1** – Basic CLI agent with tools, safety layer, and logging  
-- **MK1.5** – Same agent, plus a small local language model for free-form chat
+> **Privacy-first:** no cloud APIs required by default  
+> **Safety-first:** risky actions require confirmation + everything is logged
 
 ---
 
-## Project goals
+## Table of contents
 
-1. Run completely **on-device** (no external API calls by default).
-2. Respect user **privacy** and **safety**:
-   - Actions are limited to approved tools.
-   - Risky actions must be confirmed by the user.
-   - All actions are logged locally.
-3. Be **extensible**:
-   - Easy to add new tools and abilities.
-   - Easy to swap out the language model later for a better one.
-4. Eventually support **multiple platforms**:
-   - Windows and macOS (desktop first)
-   - Later: Android and iOS, using OS-specific integrations
-
----
-
-## Current features
-
-### 1. Command-line Jarvis (CLI)
-
-- Start a simple text-based Jarvis in the terminal.
-- You can type natural language commands like:
-  - `remind me to study AI tomorrow`
-  - `open notepad`
-  - `tell me a joke`
-- Jarvis decides whether:
-  - It should call a **tool** (e.g. open an app, create a reminder), or
-  - It should just **reply in text** (chat mode).
-
-### 2. Tool system (MK1)
-
-Tools are small actions Jarvis is allowed to perform.  
-Right now, two tools are implemented:
-
-- `create_reminder(text, when)`
-  - For now, this just prints the reminder and records it in the log.
-  - Later it will integrate with a real reminder/calendar system.
-
-- `open_application(app_name)`
-  - Opens a desktop application by name.
-  - On Windows, this uses the `start` command to open apps like `notepad`.
-
-All tools are registered in `agent/tools.py`.
-
-### 3. Safety layer (risk levels + audit log)
-
-Every tool has a **risk level**:
-
-- `LOW` – Safe to auto-run (e.g. creating a reminder)
-- `MEDIUM` – Needs user confirmation
-- `HIGH` – Very sensitive actions (delete files, send emails, change security settings, etc.)
-
-The safety logic lives in `agent/safety.py` and handles:
-
-- **Risk-based confirmation**  
-  If a tool is `MEDIUM` or `HIGH`, Jarvis explains what it wants to do and asks:
-
-  > `Proceed? (y/n)`
-
-- **Audit logging**  
-  Every tool call is logged to `audit.log` with:
-  - timestamp  
-  - tool name  
-  - parameters  
-  - outcome (`success`, `cancelled`, or error message)
-
-This gives a clear history of what the agent has done on the device.
+- [What’s in MK3](#whats-in-mk3)
+- [Project structure](#project-structure)
+- [Fresh install (Windows)](#fresh-install-windows)
+- [Models (Ollama)](#models-ollama)
+- [Run Jarvis](#run-jarvis)
+- [Usage examples](#usage-examples)
+- [Dev Mode workflow](#dev-mode-workflow)
+- [Performance + timeouts](#performance--timeouts)
+- [IDE integration (optional)](#ide-integration-optional)
+- [Safety / disclaimer](#safety--disclaimer)
+- [Post-change test checklist](#post-change-test-checklist)
 
 ---
 
-## Language model (MK1.5)
+## What’s in MK3
 
-MK1.5 adds a **local chat model** using Hugging Face and PyTorch.
+### 1) Tools + Safety layer
+- **Tools** are approved actions (display / audio / network / apps / storage / etc.)
+- **Risk levels** control confirmation prompts
+- **Every tool call** is written to local audit logs
 
-- The class `ChatModel` in `agent/models.py`:
-  - Loads a small text-generation model (currently `gpt2` as a placeholder).
-  - Provides a simple `chat(messages)` method.
+### 2) Runner (Windows capabilities server)
+Jarvis talks to a local **Runner** process that exposes deterministic system actions (e.g., via a small FastAPI server).
 
-- In `agent/core.py`:
-  - When no tool is chosen for a user message, Jarvis falls back to the chat model.
-  - Example:
-    - `tell me a joke`
-    - `summarise: Today I studied AI agents and built a CLI Jarvis.`
-  - These do not trigger tools; they just generate text responses.
+### 3) Multi-model roles
+Jarvis supports 3 separate roles:
+- **General**: everyday assistant
+- **Coder**: code generation, refactors, diffs
+- **Research**: summaries, structured writing
 
-⚠️ **Note:** `gpt2` is not an instruction-tuned or safety-tuned model.  
-It is used here only as a **local test model** to prove the architecture.  
-In later versions we will replace it with a better instruct model.
+Configured in: `config/models.json`
 
----
+### 4) Dev Mode (sandbox-first patch pipeline)
+When you say something like:
+- “refactor agent/core.py…”
+- “fix this error…”
+- “add a feature…”
 
-## Planner design
-
-The agent has a **planner** that decides which tool (if any) to use.
-
-There are two planner paths:
-
-1. **Rule-based planner (current default)**  
-   - Simple keyword logic in `plan_action_rule_based()`:
-     - If the message starts with `remind me` → use `create_reminder`.
-     - If the message starts with `open ` → use `open_application`.
-   - This keeps behaviour predictable during early development.
-
-2. **Model-based planner (planned for future)**  
-   - `agent/planner.py` defines how to build a **planner prompt** listing:
-     - available tools and descriptions
-     - the user message
-   - The model is expected to return **JSON** like:
-
-     ```json
-     {
-       "tool_name": "create_reminder",
-       "params": {
-         "text": "remind me to study AI tomorrow",
-         "when": "2025-12-14 18:00"
-       }
-     }
-     ```
-
-   - `parse_planner_output()` safely parses the JSON and falls back to “no tool” if the output is invalid.
-
-In `agent/core.py`, the function `plan_action()` can choose between:
-
-- rule-based planner  
-- model-based planner (using `DummyPlannerModel`)  
-
-For now, `USE_MODEL_PLANNER` is set to `False`, so the agent still uses the simple rule-based planner.
+Jarvis can:
+1) Copy the repo into `workspace/repo_sandbox/`  
+2) Generate a **unified diff**  
+3) Apply it to the sandbox  
+4) Run tests (example: `python -m compileall .`)  
+5) Only then offer to apply the patch to the real repo  
 
 ---
 
@@ -149,111 +66,152 @@ For now, `USE_MODEL_PLANNER` is set to `False`, so the agent still uses the simp
 
 ```text
 jarvis-agent/
-  ├─ agent/
-  │   ├─ __init__.py          # makes 'agent' a package
-  │   ├─ safety.py            # risk levels, Tool class, confirmation + audit log
-  │   ├─ tools.py             # tool implementations + tool registry
-  │   ├─ core.py              # main agent logic (planning, safety, execution, chat)
-  │   ├─ planner.py           # planner prompt + JSON parsing for model-based planning
-  │   └─ models.py            # Dummy planner model + local ChatModel wrapper
-  ├─ cli.py                   # command-line interface entrypoint
-  ├─ audit.log                # (generated) log of all tool calls
-  ├─ requirements.txt         # Python dependencies
-  └─ README.md                # this file
-How to run it (Windows / Conda)
-Create and activate the Conda environment:
+├─ agent/                 # main agent logic (router, safety, models)
+├─ runner/                # Windows runner server + tool implementations
+├─ config/
+│  ├─ policy.yaml         # allow/deny + confirmations
+│  └─ models.json         # model roles + generation limits
+├─ workspace/             # sandbox repo, patches, run logs (generated)
+├─ logs/                  # audit logs + runner state (generated)
+└─ cli.py                 # CLI entrypoint
+Fresh install (Windows)
+0) Prerequisites
+Install these first:
 
-bash
-Copy code
-conda create -n jarvis-agent python=3.11
+Git
+
+Miniconda/Anaconda (Python 3.11 env)
+
+Ollama (local model runtime)
+
+1) Clone the repo
+cd /d C:\Users\%USERNAME%\Code
+git clone <YOUR_REPO_URL>
+cd Jarvis-Project\jarvis-agent
+2) Create + activate the conda environment
+conda create -n jarvis-agent python=3.11 -y
 conda activate jarvis-agent
-Install dependencies:
+3) Install Python dependencies
+If you have a requirements.txt, prefer:
+pip install -r requirements.txt
+If not, install the essentials (adjust as your repo evolves):
 
-bash
-Copy code
+pip install fastapi uvicorn pydantic pyyaml
 pip install torch transformers
-Clone this repo and go into the folder:
+Optional (useful for system stats/tools):
 
-bash
-Copy code
-git clone <your-repo-url>
-cd jarvis-agent
-Run the CLI:
+pip install psutil
+4) Verify Ollama is running
+Ollama usually runs as a background service after installation:
+ollama --version
+Models (Ollama)
+Default MK3 models (example set)
+These should match config/models.json:
+ollama pull llama3.1:8b
+ollama pull qwen2.5-coder:14b
+ollama pull qwen2.5:14b-instruct-q4_K_M
+Recommended model options for a 32GB RAM PC
+If you want “better” models (or more stable performance), here are sensible swap options. Pick one per role and update config/models.json accordingly.
 
-bash
-Copy code
+General (chat) options
+
+llama3.1:8b (great default)
+
+qwen2.5:14b-instruct-q4_K_M (strong, heavier)
+
+Coder options
+
+qwen2.5-coder:14b (strong, heavier)
+
+If you hit timeouts: consider a smaller coder model (same family, smaller size if available in your setup)
+
+Research options
+
+qwen2.5:14b-instruct-q4_K_M (good structured writing)
+
+Or use the same general model for research to reduce memory load
+
+Tip: If performance is inconsistent, run one 14B model + two smaller models, rather than three “heavy” ones.
+
+Run Jarvis
+From inside jarvis-agent/ with the environment active:
+
+
+conda activate jarvis-agent
+cd /d C:\Users\%USERNAME%\Code\Jarvis-Project\jarvis-agent
 python cli.py
-Try some commands:
+Usage examples
+Normal tool commands
+Try phrases like:
 
-remind me to study AI tomorrow
+audio status
 
-open notepad
+wifi status
 
-tell me a joke
+bluetooth on
 
-summarise: Today I studied AI agents and built a CLI Jarvis.
+list installed apps
 
-Safety and privacy
-All logic runs locally on the device.
+storage usage
 
-No external APIs are called by default.
+logs
 
-Tool actions are restricted by:
+logs last 50
 
-risk levels
+Dev Mode commands
+dev status
 
-confirmation prompts
+sandbox reset
 
-audit logging
+fix this error: <paste traceback>
 
-Future versions will:
+refactor agent/core.py: extract logs formatting into helper; output identical; minimal change
 
-keep user data stored locally (e.g. in an encrypted folder/database)
+Dev Mode workflow
+1) Reset sandbox
+sandbox reset
+2) Ask for a change
+Example:
+refactor agent/core.py: rename local variable 'lines_list' to 'tail_lines' in logs.tail formatting only; keep output identical
+3) If Jarvis produces a patch
+Confirm apply to sandbox
 
-add more careful control over high-risk tools (delete, send, install, etc.)
+Confirm it runs sandbox checks (e.g., compileall)
 
-Roadmap
-MK1 (done)
-CLI interface
+4) If sandbox tests pass
+Use dev apply patch to apply to the real repo (critical confirm).
 
-Basic tools (reminders, open app)
+Performance + timeouts
+If the coder model times out during patch generation:
 
-Safety layer with risk levels and action logging
+Option A — Reduce generation length
+In config/models.json, lower:
 
-Planner skeleton (rule-based + model-based design)
+generation.coder.num_predict (try 120)
 
-MK1.5 (in progress)
-Local chat model for general conversation and simple tasks
+Option B — Make the request smaller
+Ask for minimal diffs:
 
-Clean separation between:
+“change only X function”
 
-Agent mode (tools/actions)
+“minimal diff”
 
-Chat mode (pure text replies)
+“no refactor, just fix the bug”
 
-MK2 (planned)
-Replace GPT-2 with a stronger instruction-tuned model running locally
+Option C — Increase Ollama HTTP timeout
+In agent/models.py, look for something like a request timeout (example: timeout=120) and increase it (example: 600).
 
-Turn on the model-based planner and let the model choose tools via JSON
+IDE integration (optional)
+Jarvis is CLI-first. If you want an in-editor assistant in VS Code:
+Use Continue (VS Code extension) connected to your local Ollama models for inline coding help
+Keep Jarvis as your system tools + sandbox patch agent
 
-Add more tools:
+Future MK3.x idea:
+Build a VS Code extension that sends open file + diagnostics to Jarvis and applies returned diffs.
 
-better reminders and calendar integration
-
-simple file search and sandboxed file editing
-
-basic “run code in sandbox” for dev assistance
-
-MK3+ (future)
-Desktop GUI (Tauri/Electron)
-
-OS-native integrations (Windows, macOS)
-
-Later: Android and iOS apps using the same core agent
-
-Stronger safety, encryption, and configuration for power users
-
-Disclaimer
+Safety / disclaimer
 This is an experimental personal project.
-The current language model (gpt2) is only used as a local test model and is not aligned for production use.
-Future versions will use better models and stronger safety rules before any real-world deployment.
+Tools are gated by policy + confirmations
+Logs are stored locally
+Dev Mode is sandbox-first, but dev apply patch is critical — use carefully
+
