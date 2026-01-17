@@ -21,7 +21,8 @@ _general_model, _coder_model, _research_model = load_model_roles()
 _PENDING_SUGGESTION: Optional[str] = None
 
 # Limit LLM tool-router so it never hangs the CLI
-LLM_ROUTER_TIMEOUT_SECONDS = 6
+LLM_ROUTER_TIMEOUT_SECONDS = 12
+
 LLM_ROUTER_ENABLED = True
 
 COMMON_FILES = {
@@ -447,18 +448,88 @@ def _extract_when_from_text(text: str) -> str:
 # -------------------------
 # LLM tool-routing fallback (safe)
 # -------------------------
+import re, json
+from typing import Optional
+
 def _extract_first_json_object(text: str) -> Optional[dict]:
     if not text:
         return None
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
+
+    t = text.strip()
+
+    # strip common markdown fences
+    if t.startswith("```"):
+        t = re.sub(r"^```[a-zA-Z0-9_-]*\s*", "", t)
+        t = re.sub(r"\s*```$", "", t).strip()
+
+    dec = json.JSONDecoder()
+
+    # Try decoding from every '{' position until one works
+    for i, ch in enumerate(t):
+        if ch != "{":
+            continue
+        try:
+            obj, _end = dec.raw_decode(t[i:])
+            if isinstance(obj, dict):
+                return obj
+        except Exception:
+            continue
+
+    return None
+
+def _extract_first_valid_json(text: str) -> Optional[dict]:
+    """
+    Find and parse the first valid JSON object inside arbitrary text.
+    Tolerant of extra commentary before/after.
+    """
+    if not text:
         return None
-    chunk = text[start:end + 1]
+
+    # Fast path: try entire text
     try:
-        return json.loads(chunk)
+        obj = json.loads(text)
+        return obj if isinstance(obj, dict) else None
     except Exception:
-        return None
+        pass
+
+    # Balanced-brace scan: try every { ... } region
+    n = len(text)
+    for i in range(n):
+        if text[i] != "{":
+            continue
+        depth = 0
+        for j in range(i, n):
+            ch = text[j]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    chunk = text[i:j+1]
+                    try:
+                        obj = json.loads(chunk)
+                        return obj if isinstance(obj, dict) else None
+                    except Exception:
+                        break  # move to next starting "{"
+    return None
+
+def _extract_unified_diff(text: str) -> str:
+    """
+    Extract a unified diff block from arbitrary text.
+    We look for 'diff --git ' which is what git apply expects.
+    """
+    if not text:
+        return ""
+    idx = text.find("diff --git ")
+    if idx == -1:
+        return ""
+    diff = text[idx:].strip()
+    # Ensure trailing newline for git apply
+    if diff and not diff.endswith("\n"):
+        diff += "\n"
+    return diff
+
+
 
 
 def _tools_for_message(lower: str) -> Dict[str, Tool]:
@@ -683,6 +754,12 @@ def _summarize_matches(matches, limit=25) -> str:
     return "\n".join(out)
 
 
+from pathlib import Path
+
+def _repo_root() -> Path:
+    # agent/core.py -> agent/ -> repo root
+    return Path(__file__).resolve().parent.parent
+
 def _dev_collect_context(user_text: str) -> str:
     paths = _extract_repo_paths(user_text)
     tokens = _extract_query_tokens(user_text)
@@ -690,24 +767,43 @@ def _dev_collect_context(user_text: str) -> str:
     search_blobs = []
     read_blobs = []
 
+    repo = _repo_root()
+
+    # ---- Read referenced files (but allow new files) ----
     for p in paths:
-        out = _run_tool('code.read_file', {'path': p, 'max_lines': 160, 'start_line': 1})
-        if out and isinstance(out, dict) and out.get('result'):
-            lines = out['result'].get('lines', [])
-            read_blobs.append(f"--- FILE: {p} ---\n" + "\n".join(lines))
+        rel = (p or "").replace("\\", "/").strip()
+        if not rel:
+            continue
 
-    base_path = 'agent'
-    if 'runner' in (user_text or '').lower():
-        base_path = 'runner'
+        abs_path = (repo / rel).resolve()
 
+        # ✅ If it's a new file request, don't try to read it
+        if not abs_path.exists():
+            read_blobs.append(f"--- NEW FILE (does not exist yet): {rel} ---")
+            continue
+
+        out = _run_tool("code.read_file", {"path": rel, "max_lines": 160, "start_line": 1})
+        if out and isinstance(out, dict) and out.get("result"):
+            lines = out["result"].get("lines", [])
+            read_blobs.append(f"--- FILE: {rel} ---\n" + "\n".join(lines))
+
+    # ---- Decide where to search ----
+    base_path = "agent"
+    if "runner" in (user_text or "").lower():
+        base_path = "runner"
+
+    # ---- Search a few key tokens ----
     for tok in tokens[:3]:
-        out = _run_tool('code.search', {'query': tok, 'path': base_path, 'max_files': 50, 'max_matches': 30})
-        if out and isinstance(out, dict) and out.get('result'):
-            res = out['result']
-            matches = res.get('matches', [])
+        out = _run_tool("code.search", {"query": tok, "path": base_path, "max_files": 50, "max_matches": 30})
+        if out and isinstance(out, dict) and out.get("result"):
+            res = out["result"]
+            matches = res.get("matches", [])
             if matches:
-                search_blobs.append(f"--- SEARCH: {tok} (in {res.get('path')}) ---\n" + _summarize_matches(matches))
+                search_blobs.append(
+                    f"--- SEARCH: {tok} (in {res.get('path')}) ---\n" + _summarize_matches(matches)
+                )
 
+    # ---- Assemble context blob ----
     context = []
     if search_blobs:
         context.append("\n\n".join(search_blobs))
@@ -717,84 +813,166 @@ def _dev_collect_context(user_text: str) -> str:
     return "\n\n".join(context).strip()
 
 
-def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: str = ''):
-    prompt = [
-        'You are the CODER model for the Jarvis repo.',
-        'Goal: generate a SMALL, correct unified diff (git apply compatible) to implement the requested change.',
-        'Rules:',
-        '- Output JSON ONLY.',
-        '- Schema: {"description": string, "diff": string}.',
-        "- diff MUST be a unified diff with file paths relative to repo root, like 'agent/core.py'.",
-        '- Do NOT include backticks. Do NOT include explanations outside JSON.',
-        '- Prefer minimal edits. Keep formatting consistent.',
-        '',
+def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: str = ""):
+    from datetime import datetime
+
+    prompt_lines = [
+        "You are the CODER model for the Jarvis repo.",
+        "Goal: propose SAFE edits as FULL FILE CONTENTS (Jarvis will generate the diff).",
+        "Rules:",
+        "- Output JSON ONLY. No backticks. No explanation.",
+        '- Schema: {"description": string, "files": [{"path": string, "content": string}]}.',
+        "- Provide FULL file content for each file you modify or create (not a diff).",
+        "- Paths must be relative to repo root (e.g., agent/tools.py).",
+        "- You MAY create new files. If a file is new, include it in files anyway.",
+        "- Keep changes minimal and consistent with existing style.",
+        "",
         f"User request: {user_request}",
     ]
 
     if compile_feedback.strip():
-        prompt.append('')
-        prompt.append('Sandbox compile feedback (from previous attempt):')
-        prompt.append(compile_feedback)
+        prompt_lines += ["", "Sandbox compile feedback (from previous attempt):", compile_feedback.strip()]
 
     if context_blob.strip():
-        prompt.append('')
-        prompt.append('Repo context:')
-        prompt.append(context_blob)
+        prompt_lines += ["", "Repo context:", context_blob.strip()]
 
-    prompt.append('')
-    prompt.append('JSON:')
+    prompt_lines += ["", "JSON:"]
+
+    # NOTE: Model expects List[str], so keep as a one-item list.
+    prompt = ["\n".join(prompt_lines)]
 
     try:
-        raw = _coder_model.chat(prompt, max_new_tokens=1200, temperature=0.1).strip()
+        print("Jarvis: (coder) generating patch… (Ctrl+C to cancel)")
+        raw = _coder_model.chat(
+            prompt,
+            max_new_tokens=256,
+            temperature=0.1,
+            format="json"
+        ).strip()
+
+    except KeyboardInterrupt:
+        print("Jarvis: Dev Mode cancelled.")
+        return {"description": "", "files": [], "diff": "", "raw": "cancelled", "raw_path": ""}
+
     except Exception as e:
         print(f"Jarvis: ❌ Coder model failed: {e}")
-        print("Jarvis: Tip: increase config/models.json -> ollama.timeout_seconds "
-              "or reduce generation.coder.num_predict / use a smaller coder model.")
-        return {"description": "", "diff": "", "raw": str(e)}
-    
-    obj = _extract_first_json_object(raw) or {}
-    desc = obj.get('description', '').strip()
-    diff_text = (obj.get('diff', '') or '').rstrip() + '\n' if obj.get('diff') else ''
+        print("Jarvis: Tip: use a smaller coder model and/or lower generation.coder.num_predict.")
+        return {"description": "", "files": [], "diff": "", "raw": str(e), "raw_path": ""}
 
-    return {'description': desc, 'diff': diff_text, 'raw': raw}
+
+
+
+    # Save raw output
+    repo = _repo_root()
+    runs_dir = repo / "workspace" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    raw_path = runs_dir / f"dev_coder_raw_{ts}.txt"
+    raw_path.write_text(raw, encoding="utf-8", errors="replace")
+
+    # Parse JSON (tolerant)
+    obj = _extract_first_valid_json(raw)
+
+    desc = ""
+    clean_files = []
+    diff_text = ""
+
+    if isinstance(obj, dict) and obj:
+        desc = (obj.get("description") or "").strip()
+
+        files = obj.get("files") or []
+        if isinstance(files, list):
+            for f in files:
+                if not isinstance(f, dict):
+                    continue
+                path = f.get("path")
+                content = f.get("content")
+                if isinstance(path, str) and isinstance(content, str):
+                    clean_files.append({"path": path, "content": content})
+    else:
+        # Fallback: try extracting unified diff directly
+        diff_text = _extract_unified_diff(raw)
+
+    return {
+        "description": desc,
+        "files": clean_files,
+        "diff": diff_text,
+        "raw": raw,
+        "raw_path": str(raw_path),
+    }
+
+
+
+from datetime import datetime
+from pathlib import Path
+
+def _dev_write_debug(prefix: str, text: str) -> str:
+    root = _repo_root()
+    runs_dir = root / "workspace" / "runs"
+    runs_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    p = runs_dir / f"{prefix}_{ts}.txt"
+    p.write_text(text or "", encoding="utf-8", errors="replace")
+    return str(p.relative_to(root))
 
 
 def _handle_dev_request(user_text: str) -> None:
-    print('Jarvis: Entering Dev Mode (sandbox-first).')
+    print("Jarvis: Entering Dev Mode (sandbox-first).")
 
     context_blob = _dev_collect_context(user_text)
 
-    last_feedback = ''
+    last_feedback = ""
     for attempt in range(1, 4):
         patch = _dev_generate_patch(user_text, context_blob, compile_feedback=last_feedback)
-        diff_text = patch.get('diff', '')
 
-        if not diff_text.strip():
-            print('Jarvis: I could not produce a valid diff yet. Try including the error text or file path.')
+        desc = (patch.get("description") or f"Dev Mode patch attempt {attempt}").strip()
+        files = patch.get("files") or []
+        diff_text = (patch.get("diff") or "").strip()
+
+        if not files and not diff_text:
+            print("Jarvis: I could not produce file edits yet.")
+            # (optional) save raw here if you want
             return
 
-        desc = patch.get('description') or f'Dev Mode patch attempt {attempt}'
-        result = _run_tool('dev.propose_patch', {'diff': diff_text, 'description': desc})
+        params = {"description": desc}
+        if files:
+            params["files"] = files
+        else:
+            # diff fallback
+            params["diff"] = diff_text
+
+        result = _run_tool("dev.propose_patch", params)
+        if result is None:
+            print("Jarvis: Okay — cancelled.")
+            return
+
+        if isinstance(result, dict) and result.get("error"):
+            err = result.get("error", "")
+            details = result.get("details", "")
+            print(f"Jarvis: ❌ {err}\n{details}".strip())
+            last_feedback = f"{err}\n{details}".strip()
+            continue
 
         ok = False
-        feedback = ''
+        feedback = ""
         if isinstance(result, dict):
-            res = result.get('result') or {}
-            ok = bool(res.get('compileall_ok'))
-            feedback = (res.get('compileall_output_tail') or '').strip()
+            res = result.get("result") or {}
+            ok = bool(res.get("compileall_ok"))
+            feedback = (res.get("compileall_output_tail") or "").strip()
 
         if ok:
-            print('Jarvis: ✅ Sandbox checks passed. If you want to apply this patch to the real repo, type: apply patch')
+            print("Jarvis: ✅ Sandbox checks passed. If you want to apply this patch to the real repo, type: apply patch")
             return
 
         if not feedback:
-            print('Jarvis: Sandbox checks failed, but I could not retrieve compile output. Use `dev status` to inspect.')
+            print("Jarvis: Sandbox checks failed, but I could not retrieve compile output. Use `dev status` to inspect.")
             return
 
-        print('Jarvis: Sandbox checks failed. I will attempt a fix based on the compile output.')
+        print("Jarvis: Sandbox checks failed. I will attempt a fix based on the compile output.")
         last_feedback = feedback
 
-    print('Jarvis: I tried a few times but could not get a clean sandbox pass. Use `dev status` to review the latest output.')
+    print("Jarvis: I tried a few times but could not get a clean sandbox pass. Use `dev status` to review the latest output.")
+
 
 
 
@@ -809,6 +987,13 @@ def handle_user_message(user_message: str) -> None:
     text_lower = raw.strip().lower()
     normalized = _normalize(raw)
     norm = _apply_global_replacements(normalized)
+        # Force Dev Mode with an explicit prefix
+    if text_lower.startswith("code:") or text_lower.startswith("/code"):
+        # Remove the prefix so the coder model gets the real request
+        forced = raw.split(":", 1)[1].strip() if ":" in raw else raw.replace("/code", "", 1).strip()
+        _handle_dev_request(forced)
+        return
+
 
     # -------------------------
     # MK3.3 Dev Mode router (auto)

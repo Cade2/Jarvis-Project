@@ -1,16 +1,20 @@
 {
   "models": {
-    "general": { "provider": "ollama", "name": "llama3.1:8b" },
-    "coder": { "provider": "ollama", "name": "qwen2.5-coder:14b" },
-    "research": { "provider": "ollama", "name": "qwen2.5:14b-instruct-q4_K_M" }
+    "general": { "provider": "ollama", "name": "gpt-oss:20b" },
+    "coder": { "provider": "ollama", "name": "qwen2.5-coder:14b-instruct-q4_K_M" },
+    "research": { "provider": "ollama", "name": "gpt-oss:20b" },
+    "math": { "provider": "ollama", "name": "mightykatun/qwen2.5-math:7b" },
+    "science": { "provider": "ollama", "name": "deepseek-r1:14b" }
   },
   "ollama": {
     "host": "http://127.0.0.1:11434",
-    "timeout_seconds": 600
-    },
+    "timeout_seconds": 1800
+  },
   "generation": {
-    "general": { "num_predict": 120, "temperature": 0.4 },
-    "coder": { "num_predict": 220, "temperature": 0.2 },
-    "research": { "num_predict": 350, "temperature": 0.3 }
+    "general": { "num_predict": 180, "temperature": 0.4 },
+    "coder": { "num_predict": 900, "temperature": 0.2 },
+    "research": { "num_predict": 300, "temperature": 0.3 },
+    "math": { "num_predict": 256, "temperature": 0.1 },
+    "science": { "num_predict": 350, "temperature": 0.2 }
   }
 }

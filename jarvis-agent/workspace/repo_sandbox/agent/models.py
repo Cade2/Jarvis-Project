@@ -1,76 +1,81 @@
-from typing import List
-import json
+# agent/models.py
+from __future__ import annotations
 
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-import socket
-
-from typing import List, Tuple, Any, Dict
+from typing import List, Tuple, Any, Dict, Optional
 from pathlib import Path
+import json
+import socket
+import time
+import http.client
 import urllib.request
 import urllib.error
 
 
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
 
-class DummyPlannerModel:
-    """
-    Placeholder for a future local LLM-based planner.
 
-    For now, this class pretends to be an LLM by returning
-    hard-coded JSON based on very simple keyword checks.
-    """
+def _normalize_ollama_host(host: str) -> str:
+    h = (host or "http://127.0.0.1:11434").strip().rstrip("/")
+    for suffix in ("/api", "/v1"):
+        if h.endswith(suffix):
+            h = h[: -len(suffix)]
+    return h
 
-    def generate(self, prompt: str) -> str:
-        lower = prompt.lower()
 
-        if "remind me" in lower:
-            return json.dumps({
-                "tool_name": "create_reminder",
-                "params": {
-                    "text": "Reminder created by DummyPlannerModel",
-                    "when": "tomorrow 18:00"
-                }
-            })
+def _load_models_config() -> Dict[str, Any]:
+    cfg_path = _repo_root() / "config" / "models.json"
+    if cfg_path.exists():
+        return json.loads(cfg_path.read_text(encoding="utf-8"))
 
-        if "open " in lower:
-            return json.dumps({
-                "tool_name": "open_application",
-                "params": {
-                    "app_name": "notepad"
-                }
-            })
-
-        # Default: no tool
-        return json.dumps({
-            "tool_name": "none",
-            "params": {}
-        })
+    return {
+        "models": {
+            "general": {"provider": "ollama", "name": "llama3.1:8b"},
+            "coder": {"provider": "ollama", "name": "qwen2.5-coder:14b"},
+            "research": {"provider": "ollama", "name": "qwen2.5:14b-instruct-q4_K_M"},
+        },
+        "ollama": {"host": "http://127.0.0.1:11434", "timeout_seconds": 600},
+        "generation": {
+            "general": {"num_predict": 120, "temperature": 0.4},
+            "coder": {"num_predict": 220, "temperature": 0.2},
+            "research": {"num_predict": 350, "temperature": 0.3},
+        },
+    }
 
 
 class OllamaModel:
     """
-    Minimal Ollama client using stdlib only (no requests dependency).
-    Uses /api/generate with a single prompt string.
+    Minimal Ollama client using stdlib only.
     """
-    def __init__(self, model_name: str, host: str = "http://127.0.0.1:11434", timeout_seconds: int = 600):
+    def __init__(self, model_name: str, host: str, timeout_seconds: int = 600):
         self.model_name = model_name
-        self.host = host.rstrip("/")
+        self.host = _normalize_ollama_host(host)
         self.timeout_seconds = int(timeout_seconds)
 
-    def chat(self, messages: List[str], max_new_tokens: int = 256, temperature: float = 0.2) -> str:
+    def chat(
+        self,
+        messages: List[str],
+        max_new_tokens: int = 256,
+        temperature: float = 0.2,
+        format: Optional[str] = None,   # e.g. "json"
+        **kwargs,
+    ) -> str:
         prompt = "\n".join(messages)
 
         url = f"{self.host}/api/generate"
-        payload = {
+        payload: Dict[str, Any] = {
             "model": self.model_name,
             "prompt": prompt,
             "stream": False,
-            # max_new_tokens equivalent in Ollama is num_predict
             "options": {
                 "num_predict": int(max_new_tokens),
                 "temperature": float(temperature),
             },
         }
+
+        # If you pass format="json", Ollama will try to force valid JSON output.
+        if format:
+            payload["format"] = format
 
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -80,74 +85,98 @@ class OllamaModel:
             method="POST",
         )
 
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
-                body = resp.read().decode("utf-8")
-                obj = json.loads(body)
-                return (obj.get("response") or "").strip()
-        except (TimeoutError, socket.timeout) as e:
-            raise RuntimeError(
-                f"Ollama request timed out after {self.timeout_seconds}s for model '{self.model_name}'. "
-                "Increase config/models.json -> ollama.timeout_seconds, or reduce generation.num_predict, "
-                "or switch to a smaller coder model."
-            ) from e
-        except urllib.error.URLError as e:
-            raise RuntimeError(
-                "Ollama is not reachable. Make sure it's running (try: `ollama serve`) "
-                f"and that {self.host} is accessible."
-            ) from e
+        # Retry transient “connection dropped” cases (Ollama sometimes restarts under load)
+        last_err: Optional[Exception] = None
+        for attempt in range(1, 4):
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_seconds) as resp:
+                    body = resp.read().decode("utf-8", errors="replace")
+                    obj = json.loads(body)
+                    return (obj.get("response") or "").strip()
 
+            except (
+                ConnectionResetError,
+                ConnectionAbortedError,
+                BrokenPipeError,
+                OSError,
+                http.client.RemoteDisconnected,
+                http.client.IncompleteRead,
+                json.JSONDecodeError,
+            ) as e:
+                last_err = e
+                time.sleep(0.4 * attempt)
+                continue
+
+            except urllib.error.HTTPError as e:
+                err_body = ""
+                try:
+                    err_body = e.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                raise RuntimeError(f"Ollama HTTP {e.code} {e.reason}: {err_body[:500]}") from e
+
+            except (TimeoutError, socket.timeout) as e:
+                raise RuntimeError(
+                    f"Ollama timed out after {self.timeout_seconds}s for '{self.model_name}'."
+                ) from e
+
+            except urllib.error.URLError as e:
+                # If the reason is a dropped connection, treat it like a retryable error
+                reason = getattr(e, "reason", None)
+                if isinstance(
+                    reason,
+                    (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError, http.client.RemoteDisconnected),
+                ):
+                    last_err = e
+                    time.sleep(0.4 * attempt)
+                    continue
+
+                raise RuntimeError(
+                    f"Ollama not reachable at {self.host}. Is `ollama serve` running?"
+                ) from e
+
+        raise RuntimeError(
+            f"Ollama connection dropped while generating from '{self.model_name}'. "
+            f"This usually means the model crashed/OOM or the request was too large. "
+            f"Try a smaller coder model or lower num_predict."
+        ) from last_err
 
 
 class ChatModel:
     """
-    Local chat model wrapper using Microsoft's Phi-2.
-
-    This is the "brain" Jarvis uses whenever no tool is chosen.
+    HF fallback model (phi-2 etc).
     """
-
     def __init__(self, model_name: str = "microsoft/phi-2"):
+        # Lazy imports so Ollama-only installs don't break
+        import torch
+        from transformers import AutoModelForCausalLM, AutoTokenizer
+
+        self._torch = torch
+        self._AutoModelForCausalLM = AutoModelForCausalLM
+        self._AutoTokenizer = AutoTokenizer
+
         self.model_name = model_name
-        print(f"[ChatModel] Loading model '{model_name}' (this might take a moment)...")
+        print(f"[ChatModel] Loading model '{model_name}'...")
 
-        # Load tokenizer & model
-        self.tokenizer = AutoTokenizer.from_pretrained(
+        self.tokenizer = self._AutoTokenizer.from_pretrained(model_name, trust_remote_code=True)
+        self.model = self._AutoModelForCausalLM.from_pretrained(
             model_name,
-            trust_remote_code=True,
-        )
-        self.model = AutoModelForCausalLM.from_pretrained(
-            model_name,
-            torch_dtype=torch.float32,      # safer default for CPU; we'll optimise later
+            torch_dtype=self._torch.float32,
             trust_remote_code=True,
         )
 
-        # Pick device
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = self._torch.device("cuda" if self._torch.cuda.is_available() else "cpu")
         self.model.to(self.device)
 
-        # Make sure pad token is set to avoid attention_mask warnings
         if self.tokenizer.pad_token_id is None:
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
-    def chat(self, messages: List[str], max_new_tokens: int = 256, temperature: float = 0.2) -> str:
-        """
-        Very simple chat interface.
+    def chat(self, messages: List[str], max_new_tokens: int = 256, temperature: float = 0.2, **kwargs) -> str:
+        torch = self._torch
 
-        Args:
-            messages: List of chat turns (e.g. ["User: ...", "Assistant:", ...]).
-            max_new_tokens: Maximum number of new tokens to generate.
-        """
         prompt = "\n".join(messages)
-
-        # Tokenise without relying on pad/attention_mask tricks
-        enc = self.tokenizer(
-            prompt,
-            return_tensors="pt",
-            padding=False,
-        )
+        enc = self.tokenizer(prompt, return_tensors="pt", padding=False)
         input_ids = enc["input_ids"].to(self.device)
-
-        # Explicit attention mask = all ones (no padding)
         attention_mask = torch.ones_like(input_ids)
 
         with torch.no_grad():
@@ -157,88 +186,13 @@ class ChatModel:
                 max_new_tokens=max_new_tokens,
                 do_sample=True,
                 top_p=0.9,
-                temperature=0.6,          # slightly more focused
+                temperature=temperature,
                 repetition_penalty=1.1,
                 pad_token_id=self.tokenizer.eos_token_id,
             )
 
         full = self.tokenizer.decode(outputs[0], skip_special_tokens=True)
-        # Return only the new text after the prompt
         return full[len(prompt):].strip()
-
-
-def _repo_root() -> Path:
-    # agent/models.py -> agent/ -> jarvis-agent/
-    return Path(__file__).resolve().parent.parent
-
-def _load_models_config() -> Dict[str, Any]:
-    cfg_path = _repo_root() / "config" / "models.json"
-    if cfg_path.exists():
-        with open(cfg_path, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    # Safe defaults (if user forgot to create config/models.json)
-    return {
-        "models": {
-            "general": {"provider": "ollama", "name": "llama3.1:8b"},
-            "coder": {"provider": "ollama", "name": "qwen2.5-coder:14b"},
-            "research": {"provider": "ollama", "name": "qwen2.5:14b-instruct-q4_K_M"},
-        },
-        "ollama": {"host": "http://127.0.0.1:11434"},
-    }
-
-def build_model(model_cfg: Dict[str, Any], ollama_host: str) -> Any:
-    provider = (model_cfg.get("provider") or "hf").lower()
-    name = model_cfg.get("name") or "microsoft/phi-2"
-
-    if provider == "ollama":
-        return OllamaModel(name, host=ollama_host)
-
-    # fallback to your current HF model
-    return ChatModel(model_name=name)
-
-def load_model_roles() -> Tuple[Any, Any, Any]:
-    """
-    Returns: (general_model, coder_model, research_model)
-
-    Each returned model exposes:
-      `.chat(messages: List[str], max_new_tokens=..., temperature=...) -> str`
-
-    RoleModel wraps each model to apply default generation settings from config.
-    """
-    cfg = _load_models_config()
-    ollama_host = (cfg.get("ollama") or {}).get("host", "http://127.0.0.1:11434")
-
-    models_cfg = cfg.get("models") or {}
-    general = build_model(models_cfg.get("general", {}), ollama_host)
-    coder = build_model(models_cfg.get("coder", {}), ollama_host)
-    research = build_model(models_cfg.get("research", {}), ollama_host)
-
-    # Apply per-role generation defaults (speed/quality tuning)
-    gen_cfg = cfg.get("generation") or {}
-
-    g = gen_cfg.get("general", {})
-    c = gen_cfg.get("coder", {})
-    r = gen_cfg.get("research", {})
-
-    general_wrapped = RoleModel(
-        general,
-        num_predict=int(g.get("num_predict", 120)),
-        temperature=float(g.get("temperature", 0.4)),
-    )
-    coder_wrapped = RoleModel(
-        coder,
-        num_predict=int(c.get("num_predict", 220)),
-        temperature=float(c.get("temperature", 0.2)),
-    )
-    research_wrapped = RoleModel(
-        research,
-        num_predict=int(r.get("num_predict", 350)),
-        temperature=float(r.get("temperature", 0.3)),
-    )
-
-    return general_wrapped, coder_wrapped, research_wrapped
-
 
 
 class RoleModel:
@@ -247,10 +201,45 @@ class RoleModel:
         self.num_predict = num_predict
         self.temperature = temperature
 
-    def chat(self, messages: List[str], max_new_tokens: int = None, temperature: float = None) -> str:
+    def chat(self, messages: List[str], max_new_tokens: int = None, temperature: float = None, **kwargs) -> str:
         return self.base.chat(
             messages,
             max_new_tokens=max_new_tokens or self.num_predict,
-            temperature=temperature if temperature is not None else self.temperature,
+            temperature=self.temperature if temperature is None else temperature,
+            **kwargs,
         )
 
+
+def build_model(model_cfg: Dict[str, Any], ollama_host: str, ollama_timeout_seconds: int) -> Any:
+    provider = (model_cfg.get("provider") or "hf").lower()
+    name = model_cfg.get("name") or "microsoft/phi-2"
+
+    if provider == "ollama":
+        return OllamaModel(name, host=ollama_host, timeout_seconds=int(ollama_timeout_seconds))
+
+    return ChatModel(model_name=name)
+
+
+def load_model_roles() -> Tuple[Any, Any, Any]:
+    cfg = _load_models_config()
+
+    ollama_cfg = cfg.get("ollama") or {}
+    ollama_host = _normalize_ollama_host(ollama_cfg.get("host", "http://127.0.0.1:11434"))
+    ollama_timeout_seconds = int(ollama_cfg.get("timeout_seconds", 600))
+    print(f"[Models] Ollama host: {ollama_host} | timeout: {ollama_timeout_seconds}s")
+
+    models_cfg = cfg.get("models") or {}
+    general = build_model(models_cfg.get("general", {}), ollama_host, ollama_timeout_seconds)
+    coder = build_model(models_cfg.get("coder", {}), ollama_host, ollama_timeout_seconds)
+    research = build_model(models_cfg.get("research", {}), ollama_host, ollama_timeout_seconds)
+
+    gen_cfg = cfg.get("generation") or {}
+    g = gen_cfg.get("general", {})
+    c = gen_cfg.get("coder", {})
+    r = gen_cfg.get("research", {})
+
+    return (
+        RoleModel(general, num_predict=g.get("num_predict", 180), temperature=g.get("temperature", 0.4)),
+        RoleModel(coder,   num_predict=c.get("num_predict", 400), temperature=c.get("temperature", 0.2)),
+        RoleModel(research,num_predict=r.get("num_predict", 300), temperature=r.get("temperature", 0.3)),
+    )

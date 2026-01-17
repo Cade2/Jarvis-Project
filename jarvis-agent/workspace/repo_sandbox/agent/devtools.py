@@ -1,43 +1,58 @@
 # agent/devtools.py
 from __future__ import annotations
 
-from typing import Dict, Any, Optional, Tuple, List
+"""Dev Mode sandbox + patch pipeline (agent-side).
+
+Key design goals:
+- Never write outside repo/ except inside workspace/.
+- Prefer file-based edits (full file contents) so we DON'T depend on `git`.
+- Still save a unified diff for transparency/auditability.
+- Only `dev.apply_patch` can touch the real repo (CRITICAL).
+"""
+
+from typing import Dict, Any, Tuple, List
 from pathlib import Path
 from datetime import datetime
 import json
 import shutil
 import subprocess
 import os
-
-# NOTE:
-# - This module is "agent-side" (runner-independent).
-# - It only writes inside workspace/, except dev.apply_patch which applies to real repo (CRITICAL).
+import difflib
 
 
 # -------------------------
 # Paths + state helpers
 # -------------------------
 
-import subprocess
-from datetime import datetime
-from pathlib import Path
 
-def _run(cmd, cwd: Path):
-    p = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        shell=False
-    )
-    return p.returncode, p.stdout, p.stderr
+def _run(cmd: List[str], cwd: Path) -> Tuple[int, str, str]:
+    """Run a subprocess safely.
 
-def _ts():
+    Returns: (returncode, stdout, stderr)
+    Never raises FileNotFoundError (we convert it into a clean error message).
+    """
+    try:
+        p = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            shell=False,
+        )
+        return p.returncode, p.stdout or "", p.stderr or ""
+    except FileNotFoundError:
+        return 127, "", f"Command not found: {cmd[0]} (is it installed and on PATH?)"
+    except Exception as e:
+        return 1, "", f"Failed to run command {cmd!r}: {e}"
+
+
+def _now_id() -> str:
     return datetime.now().strftime("%Y%m%d_%H%M%S")
 
-def _write_text(path: Path, text: str):
+
+def _write_text(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(text, encoding="utf-8")
+    path.write_text(text, encoding="utf-8", errors="replace")
 
 
 def _repo_root() -> Path:
@@ -50,6 +65,11 @@ def _workspace_root() -> Path:
 
 
 def _sandbox_root() -> Path:
+    # Allow override to avoid Windows MAX_PATH issues if needed
+    # Example: set JARVIS_SANDBOX_DIR=C:\sb
+    override = os.environ.get("JARVIS_SANDBOX_DIR", "").strip()
+    if override:
+        return Path(override)
     return _workspace_root() / "repo_sandbox"
 
 
@@ -65,10 +85,6 @@ def _state_path() -> Path:
     return _workspace_root() / "state.json"
 
 
-def _now_id() -> str:
-    return datetime.now().strftime("%Y%m%d_%H%M%S")
-
-
 def _load_state() -> Dict[str, Any]:
     p = _state_path()
     if not p.exists():
@@ -80,7 +96,6 @@ def _load_state() -> Dict[str, Any]:
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
-        # If corrupted, reset safely
         return {
             "pending_patch": None,
             "last_test": None,
@@ -100,16 +115,14 @@ def _ensure_workspace_layout() -> None:
 
 
 def _git_available() -> bool:
-    try:
-        subprocess.run(["git", "--version"], capture_output=True, text=True, check=True)
-        return True
-    except Exception:
-        return False
+    rc, _, _ = _run(["git", "--version"], cwd=_repo_root())
+    return rc == 0
 
 
 def _copy_repo_to_sandbox() -> None:
-    """
-    Recreate workspace/repo_sandbox as a clean copy of repo (excluding workspace/, logs/, .git, caches).
+    """Recreate sandbox as a clean copy of the repo.
+
+    Excludes workspace/, logs/, .git, caches.
     """
     root = _repo_root()
     sandbox = _sandbox_root()
@@ -118,7 +131,6 @@ def _copy_repo_to_sandbox() -> None:
         shutil.rmtree(sandbox)
 
     def _ignore(dirpath: str, names: List[str]) -> set:
-        # dirpath is str
         ignore = set()
         base = os.path.basename(dirpath).lower()
 
@@ -129,14 +141,19 @@ def _copy_repo_to_sandbox() -> None:
                 ignore.add(n)
             if nl == "__pycache__":
                 ignore.add(n)
+            if nl.endswith(".pyc"):
+                ignore.add(n)
 
         # Ignore root-level folders we don't want duplicated
-        # (workspace must not nest inside sandbox)
         if Path(dirpath).resolve() == root.resolve():
             for n in names:
                 nl = n.lower()
                 if nl in {"workspace", "logs"}:
                     ignore.add(n)
+
+        # Defensive: do not copy any workspace folders anywhere
+        if base == "workspace" or base == "logs":
+            return set(names)
 
         return ignore
 
@@ -144,50 +161,154 @@ def _copy_repo_to_sandbox() -> None:
 
 
 def _run_compileall(cwd: Path) -> Tuple[bool, str]:
-    """
-    Run basic deterministic checks. Start with compileall.
-    """
+    """Deterministic checks (start simple): compileall."""
     cmd = ["python", "-m", "compileall", "."]
-    p = subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True)
-    out = (p.stdout or "") + "\n" + (p.stderr or "")
-    ok = (p.returncode == 0)
-    return ok, out.strip()
+    rc, out, err = _run(cmd, cwd=cwd)
+    merged = (out or "") + "\n" + (err or "")
+    ok = (rc == 0)
+    return ok, merged.strip()
 
 
 def _write_run_log(prefix: str, content: str) -> str:
     run_id = _now_id()
     p = _runs_dir() / f"{prefix}_{run_id}.log"
-    p.write_text(content, encoding="utf-8", errors="replace")
-    return str(p.relative_to(_repo_root()))
+    p.write_text(content or "", encoding="utf-8", errors="replace")
+    return str(p.relative_to(_repo_root())).replace("\\", "/")
 
 
-def _apply_patch_with_git_apply(base_dir: Path, diff_path: Path) -> Tuple[bool, str]:
+# -------------------------
+# Patch building + applying
+# -------------------------
+
+
+_ALLOWED_PATCH_PREFIXES = ("agent/", "runner/", "config/")
+_ALLOWED_SINGLE_FILES = ("cli.py",)
+
+
+def _normalize_rel_path(p: str) -> str:
+    p = (p or "").strip().replace("\\", "/")
+    while p.startswith("./"):
+        p = p[2:]
+    return p
+
+
+def _is_allowed_patch_path(rel: str) -> bool:
+    if not rel or rel.startswith("/") or ":" in rel:
+        return False
+    if ".." in rel.split("/"):
+        return False
+    if rel.startswith(("workspace/", "logs/", ".git/")):
+        return False
+    return rel.startswith(_ALLOWED_PATCH_PREFIXES) or rel in _ALLOWED_SINGLE_FILES
+
+
+def _diff_one_file(sandbox: Path, rel: str, new_content: str) -> str:
+    rel = _normalize_rel_path(rel)
+    if not _is_allowed_patch_path(rel):
+        raise ValueError(f"Disallowed path: {rel}")
+
+    target = sandbox / rel
+    old_text = ""
+    if target.exists() and target.is_file():
+        old_text = target.read_text(encoding="utf-8", errors="replace")
+
+    old_lines = old_text.splitlines(True)
+    new_lines = (new_content or "").splitlines(True)
+
+    header = f"diff --git a/{rel} b/{rel}\n"
+    fromfile = f"a/{rel}" if target.exists() else "/dev/null"
+    tofile = f"b/{rel}"
+
+    diff_lines = list(
+        difflib.unified_diff(
+            old_lines,
+            new_lines,
+            fromfile=fromfile,
+            tofile=tofile,
+            lineterm="",
+        )
+    )
+
+    if not diff_lines:
+        return ""
+    return header + "\n".join(diff_lines) + "\n"
+
+
+def _build_diff_from_files(sandbox: Path, files: List[Dict[str, Any]]) -> str:
+    out: List[str] = []
+    for f in files:
+        rel = _normalize_rel_path(f.get("path", ""))
+        content = f.get("content", "")
+        out.append(_diff_one_file(sandbox, rel, content))
+    return "".join([d for d in out if d.strip()])
+
+
+def _apply_files_to_dir(base_dir: Path, files: List[Dict[str, Any]]) -> Tuple[bool, str]:
+    """Apply file edits by writing full contents.
+
+    This is our primary apply path (no `git` required).
     """
-    Apply a unified diff to base_dir using git apply (works even without .git).
-    """
-    if not _git_available():
-        return False, "git not found. Install Git for Windows, or ensure `git` is in PATH."
+    notes: List[str] = []
+    for f in files:
+        if not isinstance(f, dict):
+            continue
 
-    # --whitespace=nowarn to reduce noise
-    cmd = ["git", "apply", "--whitespace=nowarn", str(diff_path)]
-    p = subprocess.run(cmd, cwd=str(base_dir), capture_output=True, text=True)
-    out = (p.stdout or "") + "\n" + (p.stderr or "")
-    return (p.returncode == 0), out.strip()
+        rel = _normalize_rel_path(str(f.get("path", "")))
+        if not _is_allowed_patch_path(rel):
+            return False, f"Disallowed path: {rel}"
+
+        delete_flag = bool(f.get("delete", False))
+        abs_path = (base_dir / rel).resolve()
+
+        # Safety: ensure stays within base_dir
+        try:
+            abs_path.relative_to(base_dir.resolve())
+        except Exception:
+            return False, f"Path escapes sandbox: {rel}"
+
+        if delete_flag:
+            if abs_path.exists() and abs_path.is_file():
+                abs_path.unlink()
+                notes.append(f"deleted {rel}")
+            else:
+                notes.append(f"delete skipped (missing) {rel}")
+            continue
+
+        content = f.get("content", "")
+        if not isinstance(content, str):
+            return False, f"Invalid content for {rel} (must be a string)"
+
+        abs_path.parent.mkdir(parents=True, exist_ok=True)
+        abs_path.write_text(content, encoding="utf-8", errors="replace")
+        notes.append(f"wrote {rel} ({len(content)} chars)")
+
+    return True, "\n".join(notes)
+
+
+def _diff_paths_are_allowed(diff_text: str) -> Tuple[bool, str]:
+    paths = set()
+    for line in (diff_text or "").splitlines():
+        if line.startswith("+++ b/"):
+            rel = line[len("+++ b/") :].strip()
+            if rel and rel != "/dev/null":
+                paths.add(rel)
+    for p in paths:
+        p = _normalize_rel_path(p)
+        if not _is_allowed_patch_path(p):
+            return False, f"Disallowed path in diff: {p}"
+    return True, ""
 
 
 def _backup_changed_files(repo_dir: Path, diff_text: str, backup_root: Path) -> None:
-    """
-    Very simple backup: parse '+++ b/<path>' lines from diff and copy those files (if they exist).
-    """
+    """Backup any files mentioned by the diff (very simple parser)."""
     backup_root.mkdir(parents=True, exist_ok=True)
     changed = set()
 
-    for line in diff_text.splitlines():
+    for line in (diff_text or "").splitlines():
         if line.startswith("+++ b/"):
-            rel = line[len("+++ b/"):].strip()
-            # Skip /dev/null for deletes
+            rel = line[len("+++ b/") :].strip()
             if rel and rel != "/dev/null":
-                changed.add(rel)
+                changed.add(_normalize_rel_path(rel))
 
     for rel in changed:
         src = (repo_dir / rel).resolve()
@@ -197,41 +318,43 @@ def _backup_changed_files(repo_dir: Path, diff_text: str, backup_root: Path) -> 
             shutil.copy2(src, dst)
 
 
+def _apply_patch_with_git_apply(base_dir: Path, diff_path: Path) -> Tuple[bool, str]:
+    """Apply a unified diff using git apply."""
+    if not _git_available():
+        return False, "git not found. Install Git for Windows or add it to PATH."
+    rc, out, err = _run(["git", "apply", "--whitespace=nowarn", str(diff_path)], cwd=base_dir)
+    merged = (out or "") + "\n" + (err or "")
+    return (rc == 0), merged.strip()
+
+
 # -------------------------
 # Public tool functions
 # -------------------------
 
-def dev_status(params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Shows current dev pipeline state:
-    - pending patch (if any)
-    - last test result
-    - sandbox path
-    """
+
+def dev_status(params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Show dev pipeline state."""
     _ensure_workspace_layout()
     state = _load_state()
 
     sandbox_exists = _sandbox_root().exists()
-    pending = state.get("pending_patch")
-    last_test = state.get("last_test")
-
     return {
         "result": {
             "sandbox_exists": sandbox_exists,
-            "sandbox_path": str(_sandbox_root().relative_to(_repo_root())),
-            "pending_patch": pending,
-            "last_test": last_test,
+            "sandbox_path": str(_sandbox_root()),
+            "pending_patch": state.get("pending_patch"),
+            "last_test": state.get("last_test"),
         }
     }
 
 
-def dev_sandbox_reset(params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Re-copy repo -> workspace/repo_sandbox.
-    Clears pending patch state.
-    """
+def dev_sandbox_reset(params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Re-copy repo -> sandbox and run checks."""
     _ensure_workspace_layout()
-    _copy_repo_to_sandbox()
+    try:
+        _copy_repo_to_sandbox()
+    except Exception as e:
+        return {"error": "Failed to build sandbox.", "details": str(e)}
 
     ok, out = _run_compileall(_sandbox_root())
     run_log = _write_run_log("sandbox_reset_compileall", out)
@@ -250,62 +373,91 @@ def dev_sandbox_reset(params: Dict[str, Any] = None) -> Dict[str, Any]:
     return {"result": {"sandbox_reset": True, "compileall_ok": ok, "run_log": run_log}}
 
 
-def dev_propose_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Save diff to workspace/patches/, apply to sandbox only, run compileall,
-    and store as pending patch in workspace/state.json.
-    """
+def dev_propose_patch(params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Apply a patch to the SANDBOX only, run checks, store as pending."""
     params = params or {}
-    diff_text = params.get("diff", "")
-    desc = params.get("description", "")
-
-    if not diff_text.strip():
-        return {"error": "Missing 'diff' content."}
+    desc = (params.get("description") or "").strip()
+    diff_text = (params.get("diff") or "").strip()
+    files = params.get("files")
 
     _ensure_workspace_layout()
 
     sandbox = _sandbox_root()
     if not sandbox.exists():
-        return {"error": "Sandbox does not exist. Run 'sandbox reset' first."}
+        # Reduce friction: build sandbox automatically if missing
+        try:
+            _copy_repo_to_sandbox()
+        except Exception as e:
+            return {"error": "Sandbox does not exist and could not be created.", "details": str(e)}
 
-    # Save patch file
+    # Build diff from file edits if provided
+    if (not diff_text) and files is not None:
+        if not isinstance(files, list):
+            return {"error": "Invalid 'files' (must be a list)."}
+        try:
+            diff_text = _build_diff_from_files(sandbox, files)
+        except Exception as e:
+            return {"error": "Failed to build diff from files.", "details": str(e)}
+
+    if not diff_text:
+        return {"error": "Missing diff. Provide 'diff' or 'files'."}
+
+    ok_paths, why = _diff_paths_are_allowed(diff_text)
+    if not ok_paths:
+        return {"error": "Patch contains disallowed paths.", "details": why}
+
     patch_id = _now_id()
+
+    # Save patch files for audit
     patch_rel = Path("workspace") / "patches" / f"pending_{patch_id}.diff"
     patch_path = (_repo_root() / patch_rel).resolve()
-    # Ensure newline at end (git apply can be picky)
     if not diff_text.endswith("\n"):
         diff_text += "\n"
     _write_text(patch_path, diff_text)
 
-    # 1) Check patch
-    rc, out, err = _run(["git", "apply", "--check", "--whitespace=nowarn", str(patch_path)], cwd=sandbox)
-    if rc != 0:
-        return {
-            "error": "Patch check failed (git apply --check).",
-            "details": (err or out).strip() or "No output returned.",
-        }
+    files_rel = None
+    if isinstance(files, list) and files:
+        files_rel = Path("workspace") / "patches" / f"pending_{patch_id}.json"
+        files_path = (_repo_root() / files_rel).resolve()
+        _write_text(files_path, json.dumps({"description": desc, "files": files}, indent=2))
 
-    # 2) Apply patch to SANDBOX only
-    rc, out, err = _run(["git", "apply", "--whitespace=nowarn", str(patch_path)], cwd=sandbox)
-    if rc != 0:
-        return {
-            "error": "Failed to apply patch to sandbox (git apply).",
-            "details": (err or out).strip() or "No output returned.",
-        }
+    # --- Apply to SANDBOX ---
+    applied_notes = ""
+    if isinstance(files, list) and files:
+        ok_apply, applied_notes = _apply_files_to_dir(sandbox, files)
+        if not ok_apply:
+            return {"error": "Failed to apply file edits to sandbox.", "details": applied_notes}
+    else:
+        # diff-only mode (manual paste) requires git
+        if not _git_available():
+            return {
+                "error": "git is required to apply raw diffs, but was not found.",
+                "details": "Install Git for Windows or use file-based patches via the coder model.",
+            }
 
-    # 3) Compile check in sandbox
+        # Check + apply
+        rc, _, err = _run(["git", "apply", "--check", "--whitespace=nowarn", str(patch_path)], cwd=sandbox)
+        if rc != 0:
+            return {"error": "Patch check failed (git apply --check).", "details": err.strip() or "No output."}
+
+        rc, _, err = _run(["git", "apply", "--whitespace=nowarn", str(patch_path)], cwd=sandbox)
+        if rc != 0:
+            return {"error": "Failed to apply patch to sandbox (git apply).", "details": err.strip() or "No output."}
+
+    # --- Checks ---
     ok, compile_out = _run_compileall(sandbox)
     run_log = _write_run_log(f"propose_patch_compileall_{patch_id}", compile_out)
 
-    # 4) Persist pending patch in state.json
     state = _load_state()
     state["pending_patch"] = {
         "id": patch_id,
-        "diff_path": str(patch_rel).replace("/", "\\"),
+        "diff_path": str(patch_rel).replace("\\", "/"),
+        "files_path": str(files_rel).replace("\\", "/") if files_rel else None,
         "description": desc,
         "when": datetime.now().isoformat(timespec="seconds"),
         "sandbox_compileall_ok": ok,
         "compile_log": run_log,
+        "apply_notes": applied_notes,
     }
     state["last_test"] = {
         "when": datetime.now().isoformat(timespec="seconds"),
@@ -326,12 +478,8 @@ def dev_propose_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
     }
 
 
-
-
-def dev_discard_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Discard pending patch and reset sandbox to clean.
-    """
+def dev_discard_patch(params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Discard pending patch and reset sandbox."""
     _ensure_workspace_layout()
     if _sandbox_root().exists():
         shutil.rmtree(_sandbox_root())
@@ -340,16 +488,14 @@ def dev_discard_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
     state = _load_state()
     state["pending_patch"] = None
     _save_state(state)
-
     return {"result": {"discarded": True, "sandbox_reset": True}}
 
 
-def dev_apply_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
-    """
-    Apply the current pending patch to the REAL repo (CRITICAL).
-    - Backs up files mentioned in diff to workspace/patches/backups/<patch_id>/
-    - Applies diff with git apply to repo root
-    - Runs checks (compileall)
+def dev_apply_patch(params: Dict[str, Any] | None = None) -> Dict[str, Any]:
+    """Apply the pending patch to the REAL repo (CRITICAL).
+
+    If we have a pending files JSON, we apply via file writes (no git required).
+    Otherwise, we apply via git apply.
     """
     _ensure_workspace_layout()
     state = _load_state()
@@ -366,25 +512,46 @@ def dev_apply_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
         return {"error": f"Diff file not found: {diff_path}"}
 
     diff_text = diff_path.read_text(encoding="utf-8", errors="replace")
+    ok_paths, why = _diff_paths_are_allowed(diff_text)
+    if not ok_paths:
+        return {"error": "Pending diff contains disallowed paths.", "details": why}
 
-    # Backup
-    patch_id = pending.get("id", _now_id())
+    patch_id = pending.get("id") or _now_id()
     backup_root = _patches_dir() / "backups" / patch_id
     _backup_changed_files(_repo_root(), diff_text, backup_root)
 
-    # Apply to real repo
-    ok_apply, apply_out = _apply_patch_with_git_apply(_repo_root(), diff_path)
-    apply_log = _write_run_log("apply_apply", apply_out)
+    # Apply
+    files_rel = pending.get("files_path")
+    if files_rel:
+        files_path = (_repo_root() / files_rel).resolve()
+        if not files_path.exists():
+            return {"error": "Pending files JSON missing.", "details": str(files_path)}
+        obj = json.loads(files_path.read_text(encoding="utf-8"))
+        files = obj.get("files") or []
+        if not isinstance(files, list):
+            return {"error": "Pending files JSON is invalid (files must be a list)."}
 
-    if not ok_apply:
-        return {
-            "error": "Failed to apply diff to real repo.",
-            "details": apply_out,
-            "apply_log": apply_log,
-            "backup": str(backup_root.relative_to(_repo_root())),
-        }
+        ok_apply, notes = _apply_files_to_dir(_repo_root(), files)
+        apply_log = _write_run_log("apply_apply", notes)
+        if not ok_apply:
+            return {
+                "error": "Failed to apply file edits to real repo.",
+                "details": notes,
+                "apply_log": apply_log,
+                "backup": str(backup_root.relative_to(_repo_root())).replace("\\", "/"),
+            }
+    else:
+        ok_apply, apply_out = _apply_patch_with_git_apply(_repo_root(), diff_path)
+        apply_log = _write_run_log("apply_apply", apply_out)
+        if not ok_apply:
+            return {
+                "error": "Failed to apply diff to real repo.",
+                "details": apply_out,
+                "apply_log": apply_log,
+                "backup": str(backup_root.relative_to(_repo_root())).replace("\\", "/"),
+            }
 
-    # Run checks in real repo
+    # Re-check
     ok_check, check_out = _run_compileall(_repo_root())
     check_log = _write_run_log("apply_compileall", check_out)
 
@@ -401,7 +568,7 @@ def dev_apply_patch(params: Dict[str, Any] = None) -> Dict[str, Any]:
     return {
         "result": {
             "applied": True,
-            "backup": str(backup_root.relative_to(_repo_root())),
+            "backup": str(backup_root.relative_to(_repo_root())).replace("\\", "/"),
             "apply_log": apply_log,
             "compileall_ok": ok_check,
             "compileall_log": check_log,

@@ -742,7 +742,7 @@ TOOLS: Dict[str, Tool] = {
         risk=RiskLevel.READ_ONLY,
         func=logs_summarize_tail,
     ),
-    "code.read_file": Tool(
+        "code.read_file": Tool(
         name="code.read_file",
         description="Read a repo file safely (bounded).",
         risk=RiskLevel.READ_ONLY,
@@ -754,6 +754,7 @@ TOOLS: Dict[str, Tool] = {
         risk=RiskLevel.READ_ONLY,
         func=code_search,
     ),
+
 
     
 }
