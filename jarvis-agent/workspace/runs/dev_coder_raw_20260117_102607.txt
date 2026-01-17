@@ -1,6 +1,0 @@
-{
-    "description": "Add a short comment at the top of agent/devtools.py",
-    "files": [
-        {
-            "path": "agent/devtools.py",
-            "content": "# This file contains utilities for development mode and patch management.\n# agent/devtools.py\nfrom __future__ import annotations\n\n\"\"\"Dev Mode sandbox + patch pipeline (agent-side).\n\nKey design goals:\n- Never write outside repo/ except inside workspace/.\n- Prefer file-based edits (full file contents) so we DON'T depend on `git`.\n- Still save a unified diff for transparency/auditability.\n- Only `dev.apply_patch` can touch the real repo (CRITICAL).\n\"\"\"\n\nfrom typing import Dict, Any, Tuple, List\nfrom pathlib import Path\nfrom datetime import datetime\nimport json\nimport shutil\nimport subprocess\nimport os\ndifflib\n\n# -------------------------\n# Paths + state helpers\n# -------------------------\n\ndef _run(cmd: List[str], cwd: Path) -> Tuple[int, str, str]:\n    \"\"\"Run a subprocess safely.\n\n    Returns: (returncode, stdout, stderr)\n
