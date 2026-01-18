@@ -1,0 +1,13 @@
+{
+"description": "Add a new file agent/utils_math.py containing a prime-check function, and export it in agent/__init__.py",
+"files": [
+    {
+        "path": "agent/utils_math.py",
+        "content": "def is_prime(n):\n    """Check if a number is a prime number."""\n    if n <= 1:\n        return False\n    if n <= 3:\n        return True\n    if n % 2 == 0 or n % 3 == 0:\n        return False\n    i = 5\n    while i * i <= n:\n        if n % i == 0 or n % (i + 2) == 0:\n            return False\n        i += 6\n    return True\n"
+    },
+    {
+        "path": "agent/__init__.py",
+        "content": "# Makes 'agent' a Python package.\n\nfrom .utils_math import is_prime\n"
+    }
+]
+}

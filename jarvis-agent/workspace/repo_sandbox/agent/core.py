@@ -14,10 +14,7 @@ from .models import load_model_roles
 
 _policy = Policy.load()
 
-_roles = load_model_roles()
-_general_model, _coder_model, _research_model, _math_model = _roles[:4]
-_science_model = _roles[4] if len(_roles) > 4 else _general_model
-
+_general_model, _coder_model, _research_model = load_model_roles()
 
 
 # If Jarvis suggests a command, store it here so "yes" can execute it.
@@ -821,18 +818,17 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
 
     prompt_lines = [
         "You are the CODER model for the Jarvis repo.",
-        "Goal: propose SAFE edits as a UNIFIED DIFF (patch).",
+        "Goal: propose SAFE edits as FULL FILE CONTENTS (Jarvis will generate the diff).",
         "Rules:",
         "- Output JSON ONLY. No backticks. No explanation.",
-        '- Schema: {"description": string, "diff": string}.',
-        "- diff must be a standard unified diff (git style), with paths like a/agent/x.py and b/agent/x.py",
-        "- Paths must be relative to repo root.",
-        "- You MAY create new files. Use /dev/null in the diff for new files.",
+        '- Schema: {"description": string, "files": [{"path": string, "content": string}]}.',
+        "- Provide FULL file content for each file you modify or create (not a diff).",
+        "- Paths must be relative to repo root (e.g., agent/tools.py).",
+        "- You MAY create new files. If a file is new, include it in files anyway.",
         "- Keep changes minimal and consistent with existing style.",
-        "- NEVER modify workspace/, logs/, .git/ or anything outside agent/, runner/, config/, cli.py",
         "",
         f"User request: {user_request}",
-]
+    ]
 
     if compile_feedback.strip():
         prompt_lines += ["", "Sandbox compile feedback (from previous attempt):", compile_feedback.strip()]
@@ -849,7 +845,7 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
         print("Jarvis: (coder) generating patch… (Ctrl+C to cancel)")
         raw = _coder_model.chat(
             prompt,
-            max_new_tokens=900,
+            max_new_tokens=256,
             temperature=0.1,
             format="json"
         ).strip()
@@ -883,15 +879,23 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
 
     if isinstance(obj, dict) and obj:
         desc = (obj.get("description") or "").strip()
-        diff_text = (obj.get("diff") or "").strip()
-        if not diff_text:
-            diff_text = _extract_unified_diff(raw)
+
+        files = obj.get("files") or []
+        if isinstance(files, list):
+            for f in files:
+                if not isinstance(f, dict):
+                    continue
+                path = f.get("path")
+                content = f.get("content")
+                if isinstance(path, str) and isinstance(content, str):
+                    clean_files.append({"path": path, "content": content})
     else:
+        # Fallback: try extracting unified diff directly
         diff_text = _extract_unified_diff(raw)
 
     return {
         "description": desc,
-        "files": clean_files,   # (kept for compatibility)
+        "files": clean_files,
         "diff": diff_text,
         "raw": raw,
         "raw_path": str(raw_path),
@@ -930,27 +934,12 @@ def _handle_dev_request(user_text: str) -> None:
             # (optional) save raw here if you want
             return
 
-        if "traceback" in user_text.lower() and "traceback (most recent call last)" not in user_text.lower():
-            print("Jarvis: I don’t see the actual traceback text. Paste it (starting with 'Traceback...'), or run `logs last` and paste the output.")
-            return
-
         params = {"description": desc}
-        # Prefer diff-only workflow (safer for large files)
-        if diff_text:
-            params["diff"] = diff_text
-        else:
+        if files:
             params["files"] = files
-
-        # --- Preview proposed diff BEFORE dev.propose_patch confirmation ---
-        if diff_text:
-            print("\nJarvis: Proposed patch preview:\n")
-            max_chars = 6000
-            if len(diff_text) > max_chars:
-                print(diff_text[:max_chars])
-                print("\n... (truncated) ...\n")
-            else:
-                print(diff_text)
-
+        else:
+            # diff fallback
+            params["diff"] = diff_text
 
         result = _run_tool("dev.propose_patch", params)
         if result is None:
@@ -972,29 +961,6 @@ def _handle_dev_request(user_text: str) -> None:
             feedback = (res.get("compileall_output_tail") or "").strip()
 
         if ok:
-            # --- Auto-preview the pending diff so the user can see what will change ---
-            try:
-                repo = _repo_root()
-                state_path = repo / "workspace" / "state.json"
-                if state_path.exists():
-                    state = json.loads(state_path.read_text(encoding="utf-8"))
-                    pending = state.get("pending_patch") or {}
-                    diff_rel = pending.get("diff_path") or ""
-                    if diff_rel:
-                        diff_path = (repo / diff_rel).resolve()
-                        if diff_path.exists():
-                            diff_preview = diff_path.read_text(encoding="utf-8", errors="replace")
-                            max_chars = 6000
-                            if len(diff_preview) > max_chars:
-                                print("Jarvis: Proposed patch (truncated):\n")
-                                print(diff_preview[:max_chars])
-                                print("\n... (truncated) ...\n")
-                            else:
-                                print("Jarvis: Proposed patch:\n")
-                                print(diff_preview)
-            except Exception as e:
-                print(f"Jarvis: (preview skipped: {e})")
-
             print("Jarvis: ✅ Sandbox checks passed. If you want to apply this patch to the real repo, type: apply patch")
             return
 
@@ -1019,11 +985,9 @@ def handle_user_message(user_message: str) -> None:
         return
 
     text_lower = raw.strip().lower()
-
-    normalized = _apply_global_replacements(_normalize(raw))
+    normalized = _normalize(raw)
     norm = _apply_global_replacements(normalized)
-
-    # Force Dev Mode with an explicit prefix
+        # Force Dev Mode with an explicit prefix
     if text_lower.startswith("code:") or text_lower.startswith("/code"):
         # Remove the prefix so the coder model gets the real request
         forced = raw.split(":", 1)[1].strip() if ":" in raw else raw.replace("/code", "", 1).strip()
@@ -1037,89 +1001,6 @@ def handle_user_message(user_message: str) -> None:
     if _is_dev_request(text_lower, normalized):
         _handle_dev_request(raw)
         return
-    
-    # -------------------------
-    # Apply pending patch (typed confirmation)
-    # -------------------------
-    if normalized in ("apply patch", "dev apply patch"):
-        # Read pending patch id directly from dev state so we can show the correct phrase
-        try:
-            repo = _repo_root()
-            state_path = repo / "workspace" / "state.json"
-            state = json.loads(state_path.read_text(encoding="utf-8")) if state_path.exists() else {}
-            pending = state.get("pending_patch") or {}
-            patch_id = (pending.get("id") or "").strip()
-        except Exception:
-            patch_id = ""
-
-        if not patch_id:
-            print("Jarvis: No pending patch to apply. Use dev status / dev propose patch first.")
-            return
-
-        expected = f"APPLY PATCH {patch_id} I UNDERSTAND THIS MODIFIES THE REPO"
-        typed = input(f"Type exactly to apply the pending patch:\n{expected}\n> ").strip()
-        if typed != expected:
-            print("Jarvis: Cancelled.")
-            return
-
-        result = _run_tool("dev.apply_patch", {"confirm": typed})
-        if result is None:
-            print("Jarvis: Cancelled.")
-            return
-
-        if isinstance(result, dict) and result.get("error"):
-            print(f"Jarvis: ❌ {result.get('error')}\n{result.get('details','')}".strip())
-            return
-
-        print("Jarvis: ✅ Patch applied to real repo.")
-        return
-    
-    if normalized in ("dev status", "devmode status", "dev"):
-        res = _run_tool("dev.status", {})
-        print(f"Jarvis: {res}")
-        return
-
-    if normalized in ("sandbox reset", "dev sandbox reset", "reset sandbox"):
-        res = _run_tool("dev.sandbox_reset", {})
-        print(f"Jarvis: {res}")
-        return
-
-    if normalized in ("discard patch", "dev discard patch", "cancel patch"):
-        res = _run_tool("dev.discard_patch", {})
-        print(f"Jarvis: {res}")
-        return
-
-
-
-    # -------------------------
-    # Math role (prefix)
-    # -------------------------
-    if text_lower.startswith("math:"):
-        q = raw.split(":", 1)[1].strip() if ":" in raw else ""
-        if not q:
-            print("Jarvis: Give me a math question after `math:`")
-            return
-        reply = _math_model.chat([q])
-        print(f"Jarvis: {reply}")
-        return
-    
-    # -------------------------
-    # Science/Physics role (prefix)
-    # -------------------------
-    if text_lower.startswith(("science:", "physics:")):
-        q = raw.split(":", 1)[1].strip() if ":" in raw else ""
-        if not q:
-            print("Jarvis: Give me a question after `science:` or `physics:`")
-            return
-        prompt = [
-            "You are a helpful science/physics tutor. Explain clearly and end with a short final answer.",
-            q
-        ]
-        reply = _science_model.chat(prompt)
-        print(f"Jarvis: {reply}")
-        return
-
-
 
 
 

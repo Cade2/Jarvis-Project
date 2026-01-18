@@ -1,0 +1,11 @@
+{
+  "pending_patch": null,
+  "last_test": {
+    "when": "2026-01-18T02:19:43",
+    "ok": true,
+    "check": "compileall+smoke",
+    "log": "workspace/runs/apply_checks_20260118_021943.log",
+    "target": "repo"
+  },
+  "sandbox_path": "C:\\Users\\cadeb\\Code\\Jarvis-Project\\jarvis-agent\\workspace\\repo_sandbox"
+}

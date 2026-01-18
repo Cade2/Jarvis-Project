@@ -1,0 +1,12 @@
+diff --git a/agent/core.py b/agent/core.py
+index abcdef1..abcdef2 100644
+--- a/agent/core.py
++++ b/agent/core.py
+@@ -91,6 +91,7 @@ def _format_tool_output(tool_name: str, out: Any) -> Optional[str]:
+         lines.append(f"    - {item.get('tool')} ({item.get('count')})")
+ 
+     if notes:
++        # Adding a comment for clarity
+         lines.append("  Notes:")
+         for n in notes:
+             lines.append(f"    - {n}")
