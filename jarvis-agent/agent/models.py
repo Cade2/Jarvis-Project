@@ -222,7 +222,9 @@ def build_model(model_cfg: Dict[str, Any], ollama_host: str, ollama_timeout_seco
     return ChatModel(model_name=name)
 
 
-def load_model_roles() -> Tuple[Any, Any, Any, Any, Any]:
+from typing import Tuple, Any
+
+def load_model_roles() -> Tuple[Any, Any, Any, Any, Any, Any]:
     cfg = _load_models_config()
 
     ollama_cfg = cfg.get("ollama") or {}
@@ -231,31 +233,45 @@ def load_model_roles() -> Tuple[Any, Any, Any, Any, Any]:
     print(f"[Models] Ollama host: {ollama_host} | timeout: {ollama_timeout_seconds}s")
 
     models_cfg = cfg.get("models") or {}
-    general = build_model(models_cfg.get("general", {}), ollama_host, ollama_timeout_seconds)
-    coder = build_model(models_cfg.get("coder", {}), ollama_host, ollama_timeout_seconds)
-    research = build_model(models_cfg.get("research", {}), ollama_host, ollama_timeout_seconds)
-
-    # math role (fallback to research if missing)
-    math_cfg = models_cfg.get("math")
-    math = build_model(math_cfg, ollama_host, ollama_timeout_seconds) if math_cfg else research
-
-    # science role (fallback to general if missing)
-    sci_cfg = models_cfg.get("science")
-    science = build_model(sci_cfg, ollama_host, ollama_timeout_seconds) if sci_cfg else general
-
     gen_cfg = cfg.get("generation") or {}
-    g = gen_cfg.get("general", {})
-    c = gen_cfg.get("coder", {})
-    r = gen_cfg.get("research", {})
-    m = gen_cfg.get("math", {})
-    s = gen_cfg.get("science", {})
+
+    def _gen(name: str, default_num: int, default_temp: float):
+        g = gen_cfg.get(name) or {}
+        num = int(g.get("num_predict", default_num))
+        temp = float(g.get("temperature", default_temp))
+        return num, temp
+
+    # Build base models
+    general_base = build_model(models_cfg.get("general", {}), ollama_host, ollama_timeout_seconds)
+    coder_base = build_model(models_cfg.get("coder", {}), ollama_host, ollama_timeout_seconds)
+    research_base = build_model(models_cfg.get("research", {}), ollama_host, ollama_timeout_seconds)
+
+    math_cfg = models_cfg.get("math")
+    math_base = build_model(math_cfg, ollama_host, ollama_timeout_seconds) if math_cfg else research_base
+
+    science_cfg = models_cfg.get("science")
+    science_base = build_model(science_cfg, ollama_host, ollama_timeout_seconds) if science_cfg else general_base
+
+    review_cfg = models_cfg.get("review")
+    review_base = build_model(review_cfg, ollama_host, ollama_timeout_seconds) if review_cfg else research_base
+
+    # Generation settings (safe defaults)
+    g_num, g_temp = _gen("general", 120, 0.4)
+    c_num, c_temp = _gen("coder", 220, 0.2)
+    r_num, r_temp = _gen("research", 350, 0.3)
+    m_num, m_temp = _gen("math", 200, 0.0)
+    s_num, s_temp = _gen("science", 400, 0.2)
+    v_num, v_temp = _gen("review", 500, 0.0)
 
     return (
-        RoleModel(general,  num_predict=g.get("num_predict", 180), temperature=g.get("temperature", 0.4)),
-        RoleModel(coder,    num_predict=c.get("num_predict", 256), temperature=c.get("temperature", 0.2)),
-        RoleModel(research, num_predict=r.get("num_predict", 300), temperature=r.get("temperature", 0.3)),
-        RoleModel(math,     num_predict=m.get("num_predict", 256), temperature=m.get("temperature", 0.1)),
-        RoleModel(science,  num_predict=s.get("num_predict", 300), temperature=s.get("temperature", 0.2)),
+        RoleModel(general_base, num_predict=g_num, temperature=g_temp),
+        RoleModel(coder_base, num_predict=c_num, temperature=c_temp),
+        RoleModel(research_base, num_predict=r_num, temperature=r_temp),
+        RoleModel(math_base, num_predict=m_num, temperature=m_temp),
+        RoleModel(science_base, num_predict=s_num, temperature=s_temp),
+        RoleModel(review_base, num_predict=v_num, temperature=v_temp),
     )
+
+
 
 

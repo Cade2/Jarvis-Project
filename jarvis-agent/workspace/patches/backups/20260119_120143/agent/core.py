@@ -21,6 +21,7 @@ _review_model = _roles[5] if len(_roles) > 5 else _research_model
 
 
 
+
 # If Jarvis suggests a command, store it here so "yes" can execute it.
 _PENDING_SUGGESTION: Optional[str] = None
 
@@ -517,21 +518,54 @@ def _extract_first_valid_json(text: str) -> Optional[dict]:
                         break  # move to next starting "{"
     return None
 
+def _maybe_unescape_diff_text(s: str) -> str:
+    """
+    Turn literal '\\n' sequences into real newlines when the model returns escaped text.
+    We do this conservatively to avoid messing with legitimate backslashes.
+    """
+    if not s:
+        return ""
+    # Common case: model printed a diff as one long string with \n escapes
+    if "diff --git " in s and "\\n" in s:
+        s = s.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
+    return s
+
+
 def _extract_unified_diff(text: str) -> str:
     """
     Extract a unified diff block from arbitrary text.
     We look for 'diff --git ' which is what git apply expects.
+    Also handles model outputs that contain literal '\\n' sequences.
     """
     if not text:
         return ""
-    idx = text.find("diff --git ")
+
+    t = _maybe_unescape_diff_text(text).strip()
+
+    idx = t.find("diff --git ")
     if idx == -1:
         return ""
-    diff = text[idx:].strip()
-    # Ensure trailing newline for git apply
+
+    diff = t[idx:].strip()
+
+    # Trim obvious non-diff trailers (common when model adds extra text)
+    # Keep it simple: stop if we hit a prompt-like footer.
+    stop_markers = (
+        "Type 'CONFIRM'",
+        "Jarvis:",
+        "JSON:",
+        "```",
+    )
+    for m in stop_markers:
+        j = diff.find(m)
+        if j != -1:
+            diff = diff[:j].rstrip()
+            break
+
     if diff and not diff.endswith("\n"):
         diff += "\n"
     return diff
+
 
 
 
@@ -764,194 +798,140 @@ def _repo_root() -> Path:
     # agent/core.py -> agent/ -> repo root
     return Path(__file__).resolve().parent.parent
 
-def _dev_state_path() -> Path:
-    return _repo_root() / "workspace" / "state.json"
-
-def _dev_save_state(state: dict) -> None:
-    p = _dev_state_path()
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(json.dumps(state, indent=2), encoding="utf-8")
-
-def _format_review_block(r: dict) -> str:
-    summary = (r.get("summary") or "").strip()
-    mr = r.get("matches_request")
-    rec = (r.get("recommendation") or "").strip()
-
-    lines = []
-    lines.append("Jarvis: Patch review:")
-    lines.append(f"  Summary: {summary}")
-    lines.append(f"  Matches request: {mr}")
-    lines.append(f"  Recommendation: {rec}")
-
-    risks = r.get("risks") or []
-    if risks:
-        lines.append("  Risks:")
-        for x in risks[:8]:
-            lines.append(f"    - {x}")
-
-    susp = r.get("suspicious") or []
-    if susp:
-        lines.append("  Suspicious:")
-        for x in susp[:8]:
-            lines.append(f"    - {x}")
-
-    return "\n".join(lines)
-
-
-
-def _sanitize_review_obj(obj: Any) -> dict:
+def _dev_collect_context(user_text: str, max_files: int = 10) -> str:
     """
-    Force reviewer output into our strict schema.
-    Drops unknown keys (e.g. '@'), coerces types, fills defaults.
+    Collect targeted snippets across agent/, runner/, config/ based on the user's request.
+    Keeps context small but relevant (prevents the model from "only seeing core.py").
     """
-    allowed_recs = {"apply", "revise", "do_not_apply"}
+    repo = _repo_root()
+    roots = [repo / "agent", repo / "runner", repo / "config"]
 
-    out = {
-        "summary": "",
-        "matches_request": False,
-        "risks": [],
-        "suspicious": [],
-        "recommendation": "revise",
+    stop = {
+        "the","and","or","to","a","an","of","in","on","for","with","it","is","are","was","were",
+        "i","im","i'm","you","we","this","that","these","those","please","near","top","file"
     }
 
-    if not isinstance(obj, dict):
-        out["summary"] = "Reviewer output was not a JSON object."
-        out["risks"] = ["Reviewer output was not a JSON object."]
-        return out
-
-    # summary
-    summary = obj.get("summary")
-    if isinstance(summary, str):
-        out["summary"] = summary.strip()
-
-    # matches_request
-    mr = obj.get("matches_request")
-    if isinstance(mr, bool):
-        out["matches_request"] = mr
-    elif isinstance(mr, str):
-        out["matches_request"] = mr.strip().lower() in ("true", "yes", "y", "1")
-
-    # risks / suspicious
-    for k in ("risks", "suspicious"):
-        v = obj.get(k)
-        if isinstance(v, list):
-            out[k] = [str(x).strip() for x in v if str(x).strip()]
-        elif isinstance(v, str) and v.strip():
-            out[k] = [v.strip()]
-
-    # recommendation
-    rec = obj.get("recommendation")
-    if isinstance(rec, str):
-        rec = rec.strip().lower()
-        if rec in allowed_recs:
-            out["recommendation"] = rec
-
-    # Fill summary if empty (so your print block never looks blank)
-    if not out["summary"]:
-        out["summary"] = "No summary provided."
-
-    return out
-
-
-def _review_diff(user_request: str, diff_text: str) -> dict:
-    schema = (
-        '{\n'
-        '  "summary": "...",\n'
-        '  "matches_request": true,\n'
-        '  "risks": ["..."],\n'
-        '  "suspicious": ["..."],\n'
-        '  "recommendation": "apply|revise|do_not_apply"\n'
-        '}'
-    )
-
-    prompt = [
-        "You are a strict patch reviewer.",
-        "Return ONLY valid JSON. No markdown. No extra keys.",
-        f"JSON schema:\n{schema}",
-        "",
-        "Evaluate whether the diff matches the user request and is safe/minimal.",
-        "",
-        f"User request:\n{user_request}",
-        "",
-        f"Diff:\n{diff_text}",
-    ]
-
-    raw = _review_model.chat(prompt, max_new_tokens=400, temperature=0.0, format="json")
-
-    # Save raw reviewer output for debugging
-    raw_path = _dev_write_debug("dev_review_raw", raw)
-
-    obj = _extract_first_valid_json(raw)
-    review = _sanitize_review_obj(obj)
-
-    # If it failed, make it obvious where to look
-    if review.get("summary") == "Reviewer output was not a JSON object.":
-        review["risks"] = [f"Raw reviewer output saved to: {raw_path}"] + (review.get("risks") or [])
-
-    return review
-
-
-
-
-def _dev_collect_context(user_text: str) -> str:
-    paths = _extract_repo_paths(user_text)
-    tokens = _extract_query_tokens(user_text)
-
-    search_blobs = []
-    read_blobs = []
-
-    repo = _repo_root()
-
-    # ---- Read referenced files (but allow new files) ----
-    for p in paths:
-        rel = (p or "").replace("\\", "/").strip()
-        if not rel:
+    tokens = re.findall(r"[A-Za-z_][A-Za-z0-9_]{2,}", user_text or "")
+    keywords = []
+    for t in tokens:
+        tl = t.lower()
+        if tl in stop:
             continue
-
-        abs_path = (repo / rel).resolve()
-
-        # ✅ If it's a new file request, don't try to read it
-        if not abs_path.exists():
-            read_blobs.append(f"--- NEW FILE (does not exist yet): {rel} ---")
+        if len(tl) > 40:
             continue
+        if tl not in keywords:
+            keywords.append(tl)
+    keywords = keywords[:12]
 
-        out = _run_tool("code.read_file", {"path": rel, "max_lines": 160, "start_line": 1})
-        if out and isinstance(out, dict) and out.get("result"):
-            lines = out["result"].get("lines", [])
-            read_blobs.append(f"--- FILE: {rel} ---\n" + "\n".join(lines))
+    # Always include a few anchor files
+    always = []
+    for rel in ("agent/core.py", "agent/devtools.py", "agent/tools.py", "agent/models.py", "config/models.json", "config/policy.yaml"):
+        fp = repo / rel
+        if fp.exists():
+            always.append(fp)
 
-    # ---- Decide where to search ----
-    base_path = "agent"
-    if "runner" in (user_text or "").lower():
-        base_path = "runner"
+    # Gather candidate files
+    candidates = []
+    for r in roots:
+        if not r.exists():
+            continue
+        for fp in r.rglob("*"):
+            if fp.is_file():
+                if fp.suffix.lower() in (".py", ".json", ".yaml", ".yml"):
+                    candidates.append(fp)
 
-    # ---- Search a few key tokens ----
-    for tok in tokens[:3]:
-        out = _run_tool("code.search", {"query": tok, "path": base_path, "max_files": 50, "max_matches": 30})
-        if out and isinstance(out, dict) and out.get("result"):
-            res = out["result"]
-            matches = res.get("matches", [])
-            if matches:
-                search_blobs.append(
-                    f"--- SEARCH: {tok} (in {res.get('path')}) ---\n" + _summarize_matches(matches)
-                )
+    # Score files by keyword hits
+    scored = []
+    for fp in candidates:
+        try:
+            text = fp.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            continue
+        low = text.lower()
+        score = 0
+        for k in keywords:
+            score += low.count(k)
+        if score > 0:
+            scored.append((score, fp))
 
-    # ---- Assemble context blob ----
-    context = []
-    if search_blobs:
-        context.append("\n\n".join(search_blobs))
-    if read_blobs:
-        context.append("\n\n".join(read_blobs))
+    scored.sort(key=lambda x: x[0], reverse=True)
 
-    return "\n\n".join(context).strip()
+    chosen = []
+    seen = set()
+    for fp in always + [fp for _, fp in scored]:
+        if fp in seen:
+            continue
+        seen.add(fp)
+        chosen.append(fp)
+        if len(chosen) >= max_files:
+            break
+
+    def snippet_for(fp: Path) -> str:
+        try:
+            lines = fp.read_text(encoding="utf-8", errors="ignore").splitlines()
+        except Exception:
+            return f"## {fp.relative_to(repo)}\n<unreadable>\n"
+
+        # Find hit lines
+        hits = []
+        for i, ln in enumerate(lines, start=1):
+            lnl = ln.lower()
+            if any(k in lnl for k in keywords):
+                hits.append(i)
+        hits = hits[:2]
+
+        radius = 8
+        out = [f"## {fp.relative_to(repo)}"]
+        if hits:
+            for h in hits:
+                a = max(1, h - radius)
+                b = min(len(lines), h + radius)
+                out.append(f"(around line {h})")
+                for n in range(a, b + 1):
+                    out.append(f"{n:4d} | {lines[n-1]}")
+                out.append("")
+        else:
+            # fallback: header chunk
+            for n in range(1, min(len(lines), 60) + 1):
+                out.append(f"{n:4d} | {lines[n-1]}")
+            out.append("")
+        return "\n".join(out)
+
+    context_parts = []
+    context_parts.append("### USER REQUEST")
+    context_parts.append(user_text.strip() if user_text else "")
+    context_parts.append("\n### REPO SNIPPETS")
+    for fp in chosen:
+        context_parts.append(snippet_for(fp))
+
+    return "\n".join(context_parts)
+
+
+def _maybe_unescape_diff_text(s: str) -> str:
+    s = (s or "").strip()
+    # If it contains literal "\n" but no real newlines, convert.
+    if "\\n" in s and "\n" not in s:
+        s = s.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\t", "\t")
+    return s
+
 
 
 def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: str = ""):
     from datetime import datetime
 
-    # Planner: gpt-oss -> patch spec
-    plan = _dev_plan_patch(user_request, context_blob)
-    plan_json = json.dumps(plan, indent=2)
+    schema_example = (
+        '{'
+        '"description":"Add a comment near the top of agent/core.py",'
+        '"diff":"diff --git a/agent/core.py b/agent/core.py\\n'
+        'index 1234567..89abcde 100644\\n'
+        '--- a/agent/core.py\\n'
+        '+++ b/agent/core.py\\n'
+        '@@ -1,6 +1,7 @@\\n'
+        ' ...\\n'
+        '+# DEV TEST\\n'
+        ' ...\\n"'
+        '}'
+    )
 
     prompt_lines = [
         "You are the CODER model for the Jarvis repo.",
@@ -966,8 +946,7 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
         "",
         "If you cannot comply, return exactly: {\"description\":\"\", \"diff\":\"\"}",
         "",
-        "PATCH SPEC (follow exactly):",
-        plan_json,
+        f"Example JSON (shape only): {schema_example}",
         "",
         f"User request: {user_request}",
     ]
@@ -982,6 +961,7 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
 
     prompt = ["\n".join(prompt_lines)]
 
+    # Generate
     try:
         print("Jarvis: (coder) generating patch… (Ctrl+C to cancel)")
         raw = _coder_model.chat(
@@ -1015,10 +995,20 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
         desc = (obj.get("description") or "").strip()
         diff_text = (obj.get("diff") or "").strip()
 
+    # Fallback: pull diff out of raw if model embedded it in text
     if not diff_text:
         diff_text = _extract_unified_diff(raw).strip()
 
-    # Validate diff
+    # Handle escaped diffs (\\n etc) if you have this helper
+    try:
+        diff_text = _maybe_unescape_diff_text(diff_text).strip()
+    except Exception:
+        pass
+
+    if diff_text and not diff_text.endswith("\n"):
+        diff_text += "\n"
+
+    # Validate AFTER extraction
     if not diff_text.startswith("diff --git "):
         keys = list(obj.keys()) if isinstance(obj, dict) else []
         return {
@@ -1027,15 +1017,12 @@ def _dev_generate_patch(user_request: str, context_blob: str, compile_feedback: 
             "diff": "",
             "raw": raw,
             "raw_path": str(raw_path),
-            "parse_error": f'Missing unified diff starting with "diff --git". Top-level keys: {keys}',
+            "parse_error": f'Coder output missing unified diff starting with "diff --git". Top-level keys: {keys}',
         }
-
-    if not diff_text.endswith("\n"):
-        diff_text += "\n"
 
     return {
         "description": desc,
-        "files": [],  # keep for compatibility
+        "files": [],  # kept for compatibility
         "diff": diff_text,
         "raw": raw,
         "raw_path": str(raw_path),
@@ -1057,51 +1044,69 @@ def _dev_write_debug(prefix: str, text: str) -> str:
     return str(p.relative_to(root))
 
 
-def _dev_plan_patch(user_request: str, context_blob: str) -> dict:
-    """
-    Use gpt-oss (general/research) to convert a natural request into a precise patch spec.
-    Output is JSON with stable keys so the coder can follow it.
-    """
+def _dev_state_path() -> Path:
+    return _repo_root() / "workspace" / "state.json"
+
+def _dev_load_state() -> dict:
+    p = _dev_state_path()
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            return {}
+    return {}
+
+def _dev_save_state(state: dict) -> None:
+    p = _dev_state_path()
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(state, indent=2), encoding="utf-8")
+
+def _format_review_block(r: dict) -> str:
+    lines = []
+    lines.append("Jarvis: DeepSeek review of pending patch:")
+    lines.append(f"  Summary: {r.get('summary','')}".strip())
+    lines.append(f"  Matches request: {r.get('matches_request')}")
+    rec = r.get("recommendation")
+    lines.append(f"  Recommendation: {rec}")
+    risks = r.get("risks") or []
+    if risks:
+        lines.append("  Risks:")
+        for x in risks[:8]:
+            lines.append(f"    - {x}")
+    susp = r.get("suspicious") or []
+    if susp:
+        lines.append("  Suspicious:")
+        for x in susp[:8]:
+            lines.append(f"    - {x}")
+    return "\n".join(lines)
+
+def _deepseek_review_diff(user_request: str, diff_text: str) -> dict:
     schema = (
         '{\n'
         '  "summary": "...",\n'
-        '  "target_files": ["agent/core.py"],\n'
-        '  "changes": ["..."],\n'
-        '  "constraints": ["..."],\n'
-        '  "acceptance_checks": ["..."]\n'
+        '  "matches_request": true,\n'
+        '  "risks": ["..."],\n'
+        '  "suspicious": ["..."],\n'
+        '  "recommendation": "apply|revise|do_not_apply"\n'
         '}'
     )
 
-    # Keep context short so it doesn't drown the model
-    ctx = (context_blob or "")
-    if len(ctx) > 6000:
-        ctx = ctx[:6000] + "\n...<truncated>..."
-
     prompt = [
-        "You are a senior software engineer planning a SAFE minimal patch.",
-        "Return ONLY valid JSON. No markdown. No extra keys.",
-        f"JSON schema:\n{schema}",
-        "",
-        f"User request:\n{user_request}",
-        "",
-        f"Repo context:\n{ctx}",
+        "You are a strict patch reviewer. Return ONLY valid JSON. No markdown. No extra keys.",
+        f"JSON schema:\n{schema}\n\nUser request:\n{user_request}\n\nDiff:\n{diff_text}",
     ]
 
-    raw = _research_model.chat(prompt, max_new_tokens=450, temperature=0.1, format="json")
-    obj = _extract_first_valid_json(raw)
-
-    # Hard defaults (never return missing keys)
-    if not isinstance(obj, dict):
-        obj = {}
-
+    raw = _review_model.chat(prompt, max_new_tokens=500, temperature=0.0, format="json")
+    obj = _extract_first_valid_json(raw)  # you already have this helper
+    if isinstance(obj, dict):
+        return obj
     return {
-        "summary": (obj.get("summary") or "").strip(),
-        "target_files": obj.get("target_files") or [],
-        "changes": obj.get("changes") or [],
-        "constraints": obj.get("constraints") or [],
-        "acceptance_checks": obj.get("acceptance_checks") or [],
+        "summary": "Could not parse reviewer output as JSON.",
+        "matches_request": False,
+        "risks": ["Reviewer output was not valid JSON."],
+        "suspicious": [],
+        "recommendation": "revise",
     }
-
 
 
 def _handle_dev_request(user_text: str) -> None:
@@ -1117,23 +1122,46 @@ def _handle_dev_request(user_text: str) -> None:
         files = patch.get("files") or []
         diff_text = (patch.get("diff") or "").strip()
 
+        # -------------------------
+        # If the coder didn't produce a usable diff/files, retry (DON'T return)
+        # -------------------------
         if not files and not diff_text:
-            print("Jarvis: I could not produce file edits yet.")
-            # (optional) save raw here if you want
-            return
+            rp = patch.get("raw_path") or ""
+            pe = patch.get("parse_error") or ""
 
+            print("Jarvis: Coder output did not include a valid unified diff. Retrying…")
+            if rp:
+                print(f"Jarvis: Coder raw output saved to: {rp}")
+
+            # Give the next attempt concrete feedback about what was wrong
+            if pe:
+                last_feedback = pe
+            else:
+                last_feedback = (
+                    "Missing unified diff. Output must be JSON with ONLY keys "
+                    '"description" and "diff", and diff must start with "diff --git".'
+                )
+            continue
+
+        # Helpful guard: if user says "traceback" but didn't paste the traceback
         if "traceback" in user_text.lower() and "traceback (most recent call last)" not in user_text.lower():
-            print("Jarvis: I don’t see the actual traceback text. Paste it (starting with 'Traceback...'), or run `logs last` and paste the output.")
+            print(
+                "Jarvis: I don’t see the actual traceback text. Paste it (starting with 'Traceback...'), "
+                "or run `logs last` and paste the output."
+            )
             return
 
         params = {"description": desc}
-        # Prefer diff-only workflow (safer for large files)
+
+        # Prefer diff-only workflow (your new safer approach)
         if diff_text:
             params["diff"] = diff_text
         else:
             params["files"] = files
 
-        # --- Preview proposed diff BEFORE dev.propose_patch confirmation ---
+        # -------------------------
+        # Preview proposed diff BEFORE dev.propose_patch confirmation
+        # -------------------------
         if diff_text:
             print("\nJarvis: Proposed patch preview:\n")
             max_chars = 6000
@@ -1143,7 +1171,9 @@ def _handle_dev_request(user_text: str) -> None:
             else:
                 print(diff_text)
 
-
+        # -------------------------
+        # Apply to SANDBOX + run checks (tool does this)
+        # -------------------------
         result = _run_tool("dev.propose_patch", params)
         if result is None:
             print("Jarvis: Okay — cancelled.")
@@ -1163,6 +1193,9 @@ def _handle_dev_request(user_text: str) -> None:
             ok = bool(res.get("compileall_ok") or res.get("checks_ok"))
             feedback = (res.get("compileall_output_tail") or "").strip()
 
+        # -------------------------
+        # If sandbox checks pass, show pending patch preview and stop
+        # -------------------------
         if ok:
             try:
                 repo = _repo_root()
@@ -1170,24 +1203,28 @@ def _handle_dev_request(user_text: str) -> None:
                 if state_path.exists():
                     state = json.loads(state_path.read_text(encoding="utf-8"))
                     pending = state.get("pending_patch") or {}
-                    diff_rel = (pending.get("diff_path") or "").strip()
+                    diff_rel = pending.get("diff_path") or ""
                     if diff_rel:
                         diff_path = (repo / diff_rel).resolve()
                         if diff_path.exists():
-                            diff_text = diff_path.read_text(encoding="utf-8", errors="ignore")
-                            req = (pending.get("description") or user_text).strip()
-                            review = _review_diff(req, diff_text)
-
-                            state.setdefault("pending_patch", {})
-                            state["pending_patch"]["review"] = review
-                            _dev_save_state(state)
-
-                            print(_format_review_block(review))
+                            diff_preview = diff_path.read_text(encoding="utf-8", errors="replace")
+                            max_chars = 6000
+                            if len(diff_preview) > max_chars:
+                                print("Jarvis: Proposed patch (truncated):\n")
+                                print(diff_preview[:max_chars])
+                                print("\n... (truncated) ...\n")
+                            else:
+                                print("Jarvis: Proposed patch:\n")
+                                print(diff_preview)
             except Exception as e:
-                print(f"Jarvis: (review skipped: {e})")
+                print(f"Jarvis: (preview skipped: {e})")
 
             print("Jarvis: ✅ Sandbox checks passed. If you want to apply this patch to the real repo, type: apply patch")
             return
+
+        # -------------------------
+        # If checks failed, feed the compile output back into attempt 2/3
+        # -------------------------
         if not feedback:
             print("Jarvis: Sandbox checks failed, but I could not retrieve compile output. Use `dev status` to inspect.")
             return
@@ -1196,6 +1233,7 @@ def _handle_dev_request(user_text: str) -> None:
         last_feedback = feedback
 
     print("Jarvis: I tried a few times but could not get a clean sandbox pass. Use `dev status` to review the latest output.")
+
 
 
 
@@ -1232,7 +1270,6 @@ def handle_user_message(user_message: str) -> None:
     # Apply pending patch (typed confirmation)
     # -------------------------
     if normalized in ("apply patch", "dev apply patch"):
-        # Read pending patch id directly from dev state so we can show the correct phrase
         try:
             repo = _repo_root()
             state_path = repo / "workspace" / "state.json"
@@ -1240,12 +1277,38 @@ def handle_user_message(user_message: str) -> None:
             pending = state.get("pending_patch") or {}
             patch_id = (pending.get("id") or "").strip()
         except Exception:
+            state = {}
+            pending = {}
             patch_id = ""
 
         if not patch_id:
             print("Jarvis: No pending patch to apply. Use dev status / dev propose patch first.")
             return
 
+        # -------------------------
+        # ✅ DeepSeek review (shown before typed phrase)
+        # -------------------------
+        review = pending.get("review")
+        if not review:
+            diff_rel = (pending.get("diff_path") or "").strip()
+            if diff_rel:
+                full_diff_path = repo / diff_rel
+                if full_diff_path.exists():
+                    diff_text = full_diff_path.read_text(encoding="utf-8", errors="ignore")
+                    req = (pending.get("description") or "").strip()
+                    review = _deepseek_review_diff(req, diff_text)
+
+                    # persist into state.json
+                    state.setdefault("pending_patch", {})
+                    state["pending_patch"]["review"] = review
+                    _dev_save_state(state)
+
+        if review:
+            print(_format_review_block(review))
+
+        # -------------------------
+        # Typed confirmation (your current flow)
+        # -------------------------
         expected = f"APPLY PATCH {patch_id} I UNDERSTAND THIS MODIFIES THE REPO"
         typed = input(f"Type exactly to apply the pending patch:\n{expected}\n> ").strip()
         if typed != expected:
@@ -1263,6 +1326,7 @@ def handle_user_message(user_message: str) -> None:
 
         print("Jarvis: ✅ Patch applied to real repo.")
         return
+
     
     if normalized in ("dev status", "devmode status", "dev"):
         res = _run_tool("dev.status", {})
