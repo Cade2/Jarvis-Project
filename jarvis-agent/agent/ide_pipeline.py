@@ -637,79 +637,168 @@ def propose_patch(session_id: str, user_prompt: str, options: Optional[Dict[str,
     return {"result": {"pending_patch": pending}}
 
 
+import shutil  # <-- add this near the top of ide_pipeline.py
+
+
 def apply_pending_patch(session_id: str, confirm: str) -> Dict[str, Any]:
-    session = load_session(session_id)
-    if not session:
-        return {"error": "Unknown session", "details": session_id}
+    s = load_session(session_id)
+    if not s:
+        return {"error": "Session not found.", "details": session_id}
 
-    pending = session.pending_patch
+    # ---- locate pending patch (support both storage styles) ----
+    pending = None
+
+    # Newer style (top-level field)
+    if hasattr(s, "pending_patch"):
+        pending = getattr(s, "pending_patch") or None
+
+    # Older style (nested under last_run)
     if not pending:
-        return {"error": "No pending patch"}
+        pending = (getattr(s, "last_run", None) or {}).get("pending_patch") or None
 
-    patch_id = (pending.get("id") or "").strip()
+    if not isinstance(pending, dict) or not pending:
+        return {"error": "No pending patch for this session."}
+
+    patch_id = str(pending.get("id") or "").strip()
     if not patch_id:
-        return {"error": "Pending patch missing id"}
+        return {"error": "Pending patch is missing an id."}
 
     expected = f"APPLY IDE PATCH {patch_id} I UNDERSTAND THIS MODIFIES THE WORKSPACE"
     if (confirm or "").strip() != expected:
-        return {"error": "Typed confirmation required", "details": f"Type exactly: {expected}"}
+        return {"error": "Typed confirmation required.", "details": f"Type exactly: {expected}"}
 
-    workspace_root = Path(session.workspace_root).resolve()
-    if not workspace_root.exists():
-        return {"error": "Workspace root does not exist", "details": str(workspace_root)}
+    root = Path(s.workspace_root).expanduser().resolve()
+    if not root.exists() or not root.is_dir():
+        return {"error": "Workspace root not found.", "details": str(root)}
 
-    # Back up changed files
-    backup_root = backups_dir() / session_id / patch_id
-    backup_root.mkdir(parents=True, exist_ok=True)
+    sandbox_root = pending.get("sandbox_root")
+    if not isinstance(sandbox_root, str) or not sandbox_root.strip():
+        return {"error": "Pending patch is missing sandbox_root."}
+    sandbox = Path(sandbox_root).expanduser().resolve()
+    if not sandbox.exists() or not sandbox.is_dir():
+        return {"error": "Sandbox root not found.", "details": str(sandbox)}
 
     changed_paths = pending.get("changed_paths") or []
-    if not isinstance(changed_paths, list):
-        changed_paths = []
+    if not isinstance(changed_paths, list) or not changed_paths:
+        return {"error": "Pending patch contains no changed_paths."}
 
-    for rel in changed_paths:
-        try:
-            src = _resolve_in_workspace(workspace_root, str(rel))
-            if src.exists() and src.is_file():
-                dst = (backup_root / _normalize_path(str(rel))).resolve()
-                dst.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(src, dst)
-        except Exception:
-            continue
+    # ---- safe path resolver (prevents path traversal) ----
+    def _safe_resolve_under(base: Path, rel: str) -> Path:
+        rel = (rel or "").strip().replace("\\", "/")
+        while rel.startswith("./"):
+            rel = rel[2:]
+        if not rel or rel.startswith("/") or ":" in rel:
+            raise ValueError(f"Invalid path: {rel!r}")
+        parts = [p for p in rel.split("/") if p]
+        if any(p == ".." for p in parts):
+            raise ValueError(f"Path traversal not allowed: {rel!r}")
+        abs_path = (base / rel).resolve()
+        abs_path.relative_to(base.resolve())  # raises if escapes
+        return abs_path
 
-    # Apply by copying files from sandbox onto workspace
-    sandbox_root = Path(pending.get("sandbox_root") or "").resolve()
-    if not sandbox_root.exists():
-        return {"error": "Sandbox missing", "details": str(sandbox_root)}
+    # ---- create backup root (stored under Jarvis repo workspace/ide/backups/...) ----
+    repo_root = Path(__file__).resolve().parent.parent  # jarvis-agent/
+    backup_root = repo_root / "workspace" / "ide" / "backups" / s.id / patch_id
+    backup_root.mkdir(parents=True, exist_ok=True)
 
+    backup_notes: List[str] = []
     apply_notes: List[str] = []
-    for rel in changed_paths:
-        rel = _normalize_path(str(rel))
-        try:
-            src = _resolve_in_workspace(sandbox_root, rel)
-            dst = _resolve_in_workspace(workspace_root, rel)
-            if not src.exists():
-                # deleted file
-                if dst.exists() and dst.is_file():
-                    dst.unlink()
-                    apply_notes.append(f"deleted {rel}")
-                continue
-            dst.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(src, dst)
-            apply_notes.append(f"applied {rel}")
-        except Exception as e:
-            return {"error": "Failed to apply file", "details": f"{rel}: {e}"}
+    applied_rels: List[str] = []
 
-    # Clear pending
-    session.pending_patch = None
-    save_session(session)
+    # ---- backup existing files BEFORE applying ----
+    try:
+        for rel in changed_paths:
+            if not isinstance(rel, str) or not rel.strip():
+                continue
+            rel = rel.strip().replace("\\", "/")
+
+            dst_real = _safe_resolve_under(root, rel)
+            if dst_real.exists() and dst_real.is_file():
+                dst_backup = backup_root / rel
+                dst_backup.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(dst_real, dst_backup)
+                backup_notes.append(f"backed up {rel}")
+    except Exception as e:
+        return {"error": "Failed to create backup.", "details": str(e)}
+
+    # ---- apply patch by copying from sandbox -> real workspace ----
+    # If a file was deleted in the sandbox, it won't exist there; we delete it in real workspace too.
+    try:
+        for rel in changed_paths:
+            if not isinstance(rel, str) or not rel.strip():
+                continue
+            rel = rel.strip().replace("\\", "/")
+
+            src_sandbox = _safe_resolve_under(sandbox, rel)
+            dst_real = _safe_resolve_under(root, rel)
+
+            if src_sandbox.exists() and src_sandbox.is_file():
+                dst_real.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_sandbox, dst_real)
+                apply_notes.append(f"wrote {rel}")
+                applied_rels.append(rel)
+            else:
+                # treat as delete
+                if dst_real.exists() and dst_real.is_file():
+                    dst_real.unlink()
+                    apply_notes.append(f"deleted {rel}")
+                    applied_rels.append(rel)
+                else:
+                    apply_notes.append(f"delete skipped (missing) {rel}")
+
+    except Exception as e:
+        # ---- rollback best-effort using backups ----
+        try:
+            for rel in applied_rels:
+                backup_file = (backup_root / rel)
+                real_file = _safe_resolve_under(root, rel)
+
+                if backup_file.exists() and backup_file.is_file():
+                    real_file.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(backup_file, real_file)
+                else:
+                    # if no backup existed, remove newly created file if present
+                    if real_file.exists() and real_file.is_file():
+                        real_file.unlink()
+        except Exception:
+            pass
+
+        return {"error": "Failed to apply patch to workspace.", "details": str(e)}
+
+    applied_info = {
+        "id": patch_id,
+        "when": datetime.now().isoformat(timespec="seconds"),
+        "notes": apply_notes,
+        "backup_root": str(backup_root),
+        "backup_notes": backup_notes,
+    }
+
+    # ---- clear pending patch so IDE UI doesn't keep showing apply state ----
+    if hasattr(s, "pending_patch"):
+        s.pending_patch = None
+
+    if getattr(s, "last_run", None) and isinstance(s.last_run, dict) and "pending_patch" in s.last_run:
+        s.last_run["pending_patch"] = None
+
+    # store last applied info (works whether or not IdeSession has this field)
+    if hasattr(s, "last_applied"):
+        s.last_applied = applied_info
+    else:
+        s.last_run = s.last_run or {}
+        s.last_run["last_applied"] = applied_info
+
+    save_session(s)
 
     return {
         "result": {
             "applied": True,
+            "applied_patch_id": patch_id,
+            "notes": apply_notes,
             "backup_root": str(backup_root),
-            "applied_files": apply_notes,
         }
     }
+
+
 
 
 def discard_pending_patch(session_id: str) -> Dict[str, Any]:
