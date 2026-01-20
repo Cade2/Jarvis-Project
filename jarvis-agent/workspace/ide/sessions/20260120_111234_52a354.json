@@ -1,0 +1,26 @@
+{
+  "id": "20260120_111234_52a354",
+  "created_at": "2026-01-20T11:12:34",
+  "client": "vscode",
+  "workspace_root": "C:\\Users\\cadeb\\Code\\Jarvis-Project\\jarvis-agent",
+  "preferences": {
+    "test_timeout_seconds": 900,
+    "test_command": "python -m compileall ."
+  },
+  "context": {
+    "active_file": "agent\\ide_bridge.py",
+    "selection": null,
+    "buffers": {}
+  },
+  "diagnostics": [
+    {
+      "message": "Example warning from IDE",
+      "end_line": 1,
+      "file": "agent\\ide_bridge.py",
+      "start_line": 1,
+      "severity": "warning"
+    }
+  ],
+  "pending_patch": null,
+  "history": []
+}

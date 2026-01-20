@@ -1,0 +1,5 @@
+# Jarvis audit session started 2026-01-10T13:03:33.011526
+2026-01-10T13:11:32.828645 | gaming.get_game_mode | {} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/gaming.get_game_mode
+2026-01-10T13:11:40.097459 | gaming.set_game_mode | {'enabled': False} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/gaming.set_game_mode
+2026-01-10T13:11:45.770977 | gaming.set_game_mode | {'enabled': True} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/gaming.set_game_mode
+2026-01-10T13:11:49.717692 | gaming.get_game_mode | {} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/gaming.get_game_mode

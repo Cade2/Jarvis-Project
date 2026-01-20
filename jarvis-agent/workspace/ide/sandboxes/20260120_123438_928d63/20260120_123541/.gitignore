@@ -1,0 +1,24 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# --- OS / IDE ---
+.vscode/
+.idea/
+
+# --- Env/secrets ---
+.env
+
+# --- Jarvis runtime output ---
+jarvis-agent/logs/
+jarvis-agent/logs/runner.pid
+audit.log
+
+# --- Jarvis workspace (generated/test artifacts) ---
+jarvis-agent/workspace/
+
+# Keep folder structure (allow .gitkeep)
+!jarvis-agent/workspace/**/.gitkeep

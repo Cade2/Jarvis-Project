@@ -1,0 +1,28 @@
+{
+  "files": {
+    "runner/tools_bluetooth.py": {
+      "lines": {
+        "35": "Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null",
+        "357": "seen.add(name)"
+      }
+    },
+    "runner/tools_storage.py": {
+      "lines": {
+        "47": "def _dir_size_fast(root: Path, *, max_entries: int, max_depth: int, deadline: float) -> Tuple[int, int, bool]:",
+        "58": "if time.time() > deadline or scanned >= max_entries:"
+      }
+    },
+    "runner/tools_network.py": {
+      "lines": {
+        "13": "def _run_powershell(script: str) -> Tuple[int, str, str]:",
+        "86": "for line in text.splitlines():"
+      }
+    },
+    "runner/tools_audio.py": {
+      "lines": {
+        "16": "_PS_COREAUDIO = r\"\"",
+        "17": "Add-Type -ErrorAction SilentlyContinue -Language CSharp -TypeDefinition @\""
+      }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+# Jarvis audit session started 2026-01-13T11:43:42.124099
+2026-01-13T11:43:42.944925 | logs.last | {'lines': 50} | success
+2026-01-13T11:43:47.921193 | logs.summarize_tail | {'lines': 160} | success
+2026-01-13T11:43:53.174001 | logs.summarize_tail | {'lines': 80} | success
+2026-01-13T11:44:13.012895 | system.get_info | {} | success
+2026-01-13T11:44:15.073250 | logs.list | {'limit': 5} | success
+2026-01-13T11:44:18.004916 | logs.last | {'lines': 50} | success
+2026-01-13T11:44:21.444926 | logs.summarize_tail | {'lines': 160} | success
+2026-01-13T11:44:26.099466 | logs.summarize_tail | {'lines': 80} | success
+2026-01-13T11:44:38.875339 | logs.list | {'limit': 5} | success
+2026-01-13T11:44:42.019208 | logs.last | {'lines': 50} | success
+2026-01-13T11:44:45.738106 | logs.summarize_tail | {'lines': 160} | success

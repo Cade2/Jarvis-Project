@@ -1,0 +1,48 @@
+{
+  "COMMON": {
+    "runner\\tools_bluetooth.py": [
+      {
+        "line_number": 35,
+        "code_snippet": "Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null\nfunction Await-AsyncOperation($op) {\n  try {\n    $t = [System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeSystemExtensions]::AsTask($op)\n  } catch {\n    $t = [System.WindowsRuntimeSystemExtensions]::AsTask($op)\n  }\n  $t.Wait()"
+      },
+      {
+        "line_number": 357,
+        "code_snippet": "seen.add(name)\nclean.append(d)"
+      }
+    ],
+    "runner\\tools_storage.py": [
+      {
+        "line_number": 47,
+        "code_snippet": "def _dir_size_fast(root: Path, *, max_entries: int, max_depth: int, deadline: float) -> Tuple[int, int, bool]:\n    \"\"\"\n    Fast best-effort directory size with limits.\n    Returns: (bytes, entries_scanned, partial)\n    \"\"\"\n    total = 0\n    scanned = 0\n    partial = False"
+      },
+      {
+        "line_number": 58,
+        "code_snippet": "if time.time() > deadline or scanned >= max_entries:\n            partial = True\n            break"
+      }
+    ],
+    "runner\\tools_network.py": [
+      {
+        "line_number": 13,
+        "code_snippet": "def _run_powershell(script: str) -> Tuple[int, str, str]:\n    \"\"\"Run a PowerShell one-liner and return (code, stdout, stderr).\"\"\"\n    p = subprocess.run(\n        [\"powershell\", \"-NoProfile\", \"-ExecutionPolicy\", \"Bypass\", \"-Command\", script],\n        capture_output=True,\n        text=True,\n    )\n    return p.returncode, (p.stdout or \"\").strip(), (p.stderr or \"\").strip()"
+      },
+      {
+        "line_number": 86,
+        "code_snippet": "for line in text.splitlines():\n        if \":\" not in line:\n            continue\n        k, v = line.split(\":\", 1)\n        k = k.strip().lower()\n        v = v.strip()"
+      }
+    ],
+    "runner\\tools_audio.py": [
+      {
+        "line_number": 16,
+        "code_snippet": "_PS_COREAUDIO = r\"\"\nAdd-Type -ErrorAction SilentlyContinue -Language CSharp -TypeDefinition @\"\nusing System;\nusing System.Runtime.InteropServices;\n\npublic enum EDataFlow { eRender = 0, eCapture = 1, eAll = 2 }\npublic enum ERole { eConsole = 0, eMultimedia = 1, eCommunications = 2 }\n\n[ComImport, Guid(\"BCDE0395-E52F-467C-8E3D-C4579291692E\")]"
+      },
+      {
+        "line_number": 17,
+        "code_snippet": "public class MMDeviceEnumeratorComObject { }\n\"\"\n\nfunction Get-AudioEndpointVolume {\n    $enumerator = New-Object -ComObject MMDeviceEnumerator\n    $devices = $enumerator.EnumerateAudioEndpoints([EDataFlow]::eRender, [ERole]::eMultimedia)\n    return $devices"
+      }
+    ]
+  },
+  "UNCOMMON": {
+    "runner\\tools_bluetooth.py": [
+      {
+        "line_number": 35,
+        "code_snippet": "Add-Type -AssemblyName System.Runtime.WindowsRuntime -ErrorAction SilentlyContinue | Out-Null\nfunction Await-AsyncOperation($op) {\n  try {\n    $t = [System.Runtime.InteropServices.WindowsRuntime.WindowsRuntimeSystemExtensions]::AsTask($op)\n  } catch {\n    $t = [System.WindowsRuntimeSystemExtensions]::AsTask($op)\n  }\

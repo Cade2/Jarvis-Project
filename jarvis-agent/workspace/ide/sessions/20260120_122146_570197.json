@@ -1,0 +1,26 @@
+{
+  "id": "20260120_122146_570197",
+  "created_at": "2026-01-20T12:21:46",
+  "client": "vscode",
+  "workspace_root": "C:\\Users\\cadeb\\Code\\Jarvis-Project\\jarvis-agent",
+  "preferences": {
+    "test_timeout_seconds": 60,
+    "test_command": "python workspace/ide/ide_test/broken.py"
+  },
+  "context": {
+    "active_file": "workspace/ide/ide_test/broken.py",
+    "selection": null,
+    "buffers": {}
+  },
+  "diagnostics": [
+    {
+      "message": "NameError: unknown_var is not defined",
+      "end_line": 2,
+      "file": "workspace/ide/ide_test/broken.py",
+      "start_line": 2,
+      "severity": "error"
+    }
+  ],
+  "pending_patch": null,
+  "history": []
+}

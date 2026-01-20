@@ -1,0 +1,18 @@
+{
+  "id": "20260120_020246_6a000c",
+  "created_at": "2026-01-20T02:02:46",
+  "client": "vscode",
+  "workspace_root": "C:\\Users\\cadeb\\Code\\Jarvis-Project\\jarvis-agent",
+  "preferences": {
+    "test_timeout_seconds": 900,
+    "test_command": "python -m compileall ."
+  },
+  "context": {
+    "active_file": null,
+    "selection": null,
+    "buffers": {}
+  },
+  "diagnostics": [],
+  "pending_patch": null,
+  "history": []
+}

@@ -1,0 +1,7 @@
+# Jarvis audit session started 2026-01-12T17:45:20.971643
+2026-01-12T17:45:29.607271 | system.get_info | {} | success
+2026-01-12T17:49:06.387951 | accessibility.set_text_size | {'percent': 110} | success
+2026-01-12T17:49:11.401218 | accessibility.set_text_size | {'percent': 100} | cancelled
+2026-01-12T17:49:17.816807 | accessibility.set_text_size | {'percent': 100} | success
+2026-01-12T17:49:58.333173 | bluetooth.toggle | {'enabled': False} | success
+2026-01-12T17:50:07.069314 | system.get_info | {} | success

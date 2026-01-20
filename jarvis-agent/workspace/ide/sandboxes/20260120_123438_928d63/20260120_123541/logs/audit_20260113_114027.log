@@ -1,0 +1,9 @@
+# Jarvis audit session started 2026-01-13T11:40:27.993318
+2026-01-13T11:40:28.984952 | logs.list | {'limit': 5} | success
+2026-01-13T11:40:33.318979 | logs.last | {'lines': 50} | success
+2026-01-13T11:40:37.013911 | logs.summarize_tail | {'lines': 160} | error: name 'joined' is not defined
+2026-01-13T11:40:58.801480 | system.get_info | {} | success
+2026-01-13T11:41:03.250260 | logs.list | {'limit': 5} | success
+2026-01-13T11:41:06.755980 | logs.last | {'lines': 50} | success
+2026-01-13T11:41:10.968006 | logs.summarize_tail | {'lines': 160} | error: name 'joined' is not defined
+2026-01-13T11:41:15.189015 | logs.summarize_tail | {'lines': 80} | error: name 'joined' is not defined
