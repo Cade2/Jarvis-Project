@@ -1,0 +1,15 @@
+# Jarvis audit session started 2026-01-13T10:24:46.382879
+2026-01-13T10:24:53.555040 | logs.list | {'limit': 5} | success
+2026-01-13T10:24:57.143264 | logs.last | {'lines': 50} | success
+2026-01-13T10:25:00.843613 | logs.last | {'lines': 120} | success
+2026-01-13T10:25:04.377157 | logs.list | {'limit': 10} | success
+2026-01-13T10:25:04.390610 | logs.tail | {'file': 'audit_20260113_100434.log', 'lines': 80} | success
+2026-01-13T10:25:08.547411 | logs.list | {'limit': 10} | success
+2026-01-13T10:25:08.561410 | logs.tail | {'file': 'audit_20260113_095143.log', 'lines': 60} | success
+2026-01-13T10:25:11.911687 | logs.list | {'limit': 10} | success
+2026-01-13T10:25:11.914692 | logs.summarize_tail | {'file': 'audit_20260113_095143.log', 'lines': 120} | success
+2026-01-13T10:25:15.714731 | logs.summarize_tail | {'lines': 160} | success
+2026-01-13T10:25:19.730941 | code.read_file | {'path': 'agent/core.py', 'max_lines': 120, 'start_line': 1} | success
+2026-01-13T10:25:23.766040 | code.read_file | {'path': 'agent/tools.py', 'max_lines': 60, 'start_line': 1} | success
+2026-01-13T10:25:27.586472 | code.search | {'query': 'load_model_roles', 'path': 'agent'} | success
+2026-01-13T10:25:33.239961 | code.search | {'query': 'logs.summarize_tail', 'path': 'agent/tools.py'} | success

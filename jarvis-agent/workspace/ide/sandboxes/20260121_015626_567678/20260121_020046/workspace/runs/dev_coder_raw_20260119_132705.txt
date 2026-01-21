@@ -1,0 +1,4 @@
+{
+  "description": "Add a comment '# DEV TEST' near the top of agent/core.py",
+  "diff": "diff --git a/agent/core.py b/agent/core.py\nindex abc1234..def5678 100644\n--- a/agent/core.py\n+++ b/agent/core.py\n@@ -1,3 +1,4 @@\n # agent/core.py\n+# DEV TEST\n from typing import Dict, Any, Optional\n from datetime import datetime, timedelta\n import re"
+}

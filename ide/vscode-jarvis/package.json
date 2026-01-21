@@ -1,0 +1,66 @@
+{
+  "name": "jarvis-ide",
+  "displayName": "Jarvis IDE",
+  "description": "Local Jarvis IDE bridge client for VS Code",
+  "version": "0.0.1",
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": [
+    "onStartupFinished",
+    "onCommand:jarvis.openChat",
+    "onCommand:jarvis.sendDiagnostics",
+    "onCommand:jarvis.applyPatch",
+    "onCommand:jarvis.discardPatch"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      { "command": "jarvis.openChat", "title": "Jarvis: Ask (Natural Language)" },
+      { "command": "jarvis.sendDiagnostics", "title": "Jarvis: Send Diagnostics" },
+      { "command": "jarvis.applyPatch", "title": "Jarvis: Apply Pending Patch" },
+      { "command": "jarvis.discardPatch", "title": "Jarvis: Discard Pending Patch" }
+    ],
+    "configuration": {
+      "title": "Jarvis IDE",
+      "properties": {
+        "jarvis.bridge.baseUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "description": "Jarvis IDE bridge base URL."
+        },
+        "jarvis.bridge.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Auto-start the Jarvis IDE bridge when a workspace opens."
+        },
+        "jarvis.bridge.command": {
+          "type": "string",
+          "default": "",
+          "description": "Optional explicit command to start the bridge (recommended for conda). Example: conda run -n jarvis-agent python -m agent.ide_bridge"
+        },
+        "jarvis.session.testCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Optional per-workspace test command (e.g., npm test, dotnet test, python -m pytest -q)."
+        },
+        "jarvis.session.testTimeoutSeconds": {
+          "type": "number",
+          "default": 900,
+          "description": "Test timeout for sandbox checks."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p ."
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "typescript": "^5.3.0"
+  }
+}

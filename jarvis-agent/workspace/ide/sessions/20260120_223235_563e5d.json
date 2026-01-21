@@ -1,0 +1,17 @@
+{
+  "id": "20260120_223235_563e5d",
+  "created_at": "2026-01-20T22:32:35",
+  "client": "vscode",
+  "workspace_root": "c:\\Users\\cadeb\\Code\\Jarvis-Project\\jarvis-agent",
+  "preferences": {
+    "test_timeout_seconds": 900
+  },
+  "context": {
+    "active_file": "workspace/ide/ide_test/broken.py",
+    "selection": null,
+    "buffers": {}
+  },
+  "diagnostics": [],
+  "pending_patch": null,
+  "history": []
+}

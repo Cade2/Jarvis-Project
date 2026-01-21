@@ -1,0 +1,11 @@
+# Jarvis audit session started 2025-12-19T11:29:27.335242
+2025-12-19T11:29:44.377340 | nearby.get_state | {} | success
+2025-12-19T11:29:51.869584 | nearby.set_mode | {'mode': 'my_devices_only'} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/nearby.set_mode
+2025-12-19T11:30:00.718748 | nearby.set_mode | {'mode': 'everyone_nearby'} | success
+2025-12-19T11:30:44.592704 | nearby.set_mode | {'mode': 'my_devices_only'} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/nearby.set_mode
+2025-12-19T11:30:53.801931 | nearby.set_mode | {'mode': 'off'} | success
+2025-12-19T11:31:29.234975 | runner.relaunch_elevated | {} | success
+2025-12-19T11:31:42.907505 | nearby.set_friendly_name | {'name': 'cade'} | success
+2025-12-19T11:31:58.596889 | nearby.set_friendly_name | {'name': 'cade'} | success
+2025-12-19T11:32:31.105781 | nearby.set_friendly_name | {'name': 'cade'} | success
+2025-12-19T11:32:59.115166 | nearby.set_mode | {'mode': 'my_devices_only'} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/nearby.set_mode

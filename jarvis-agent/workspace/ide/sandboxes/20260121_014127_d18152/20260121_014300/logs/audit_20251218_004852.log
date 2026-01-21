@@ -1,0 +1,7 @@
+# Jarvis audit session started 2025-12-18T00:48:52.140924
+2025-12-18T00:49:08.381851 | audio.get_state | {} | success
+2025-12-18T00:49:28.734013 | audio.set_volume | {'level': 20} | success
+2025-12-18T00:49:40.280479 | audio.set_mute | {'muted': False} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/audio.set_mute
+2025-12-18T00:49:49.519445 | audio.set_mute | {'muted': True} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/audio.set_mute
+2025-12-18T00:50:09.441616 | audio.set_volume | {'level': 30} | success
+2025-12-18T00:50:24.769935 | audio.set_volume | {'level': 20} | success

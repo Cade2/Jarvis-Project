@@ -1,0 +1,17 @@
+# Jarvis audit session started 2026-01-11T11:21:40.349367
+2026-01-11T11:22:49.572521 | accessibility.get_vision_state | {} | success
+2026-01-11T11:23:04.622506 | accessibility.set_text_size | {'percent': 110} | success
+2026-01-11T11:23:24.113465 | accessibility.set_text_size | {'percent': 100} | success
+2026-01-11T11:23:51.651169 | accessibility.set_transparency_effects | {'enabled': False} | success
+2026-01-11T11:24:05.342576 | accessibility.set_transparency_effects | {'enabled': True} | success
+2026-01-11T11:24:19.720449 | accessibility.set_animation_effects | {'enabled': False} | success
+2026-01-11T11:24:33.340832 | accessibility.set_animation_effects | {'enabled': True} | success
+2026-01-11T11:24:46.205939 | accessibility.set_animation_effects | {'enabled': False} | success
+2026-01-11T11:24:57.102877 | accessibility.set_animation_effects | {'enabled': True} | success
+2026-01-11T11:25:20.769597 | accessibility.set_always_show_scrollbars | {'enabled': True} | success
+2026-01-11T11:25:51.697127 | accessibility.set_always_show_scrollbars | {'enabled': False} | success
+2026-01-11T11:26:15.047158 | accessibility.set_dismiss_notifications_after | {'seconds': 30} | success
+2026-01-11T11:26:34.151575 | accessibility.set_dismiss_notifications_after | {'seconds': 60} | success
+2026-01-11T11:26:49.958309 | accessibility.set_dismiss_notifications_after | {'seconds': 300} | success
+2026-01-11T11:27:33.524198 | accessibility.set_dismiss_notifications_after | {'seconds': 300} | success
+2026-01-11T11:27:59.240175 | accessibility.set_dismiss_notifications_after | {'seconds': 5} | success

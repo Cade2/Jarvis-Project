@@ -1,0 +1,2 @@
+# Jarvis audit session started 2025-12-21T09:59:41.544779
+2025-12-21T09:59:49.440024 | bluetooth.scan_nearby | {'duration_seconds': 6, 'active_scan': True, 'max_devices': 40} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/bluetooth.scan_nearby

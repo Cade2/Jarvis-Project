@@ -1,0 +1,2 @@
+# Jarvis audit session started 2025-12-19T11:37:54.425211
+2025-12-19T11:37:57.661326 | nearby.set_mode | {'mode': 'my_devices_only'} | error: 500 Server Error: Internal Server Error for url: http://127.0.0.1:8765/tool/nearby.set_mode

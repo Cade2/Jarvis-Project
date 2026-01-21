@@ -1,0 +1,146 @@
+version: 0.1
+
+allow_domains:
+  - system
+  - storage
+  - apps
+  - network
+  - display
+  - settings
+  - runner
+  - bluetooth
+  - audio
+  - power
+  - uia
+  - nearby
+  - multitasking
+  - advanced
+  - troubleshoot
+  - about
+  - time
+  - gaming
+  - accessibility
+  - runner.restart
+  - logs
+  - code
+  - fs
+  - dev
+
+
+
+allowed_domains:
+  - system.get_info
+  - system.get_storage
+  - apps.list_installed
+  - apps.open
+  - apps.close
+  - settings.open
+  - network.get_state
+  - network.toggle_wifi
+  - network.toggle_airplane_mode
+  - network.list_wifi_networks
+  - display.get_state
+  - display.set_brightness
+  - display.list_displays
+  - display.set_resolution
+  - display.set_refresh_rate
+  - display.set_orientation
+  - display.set_multiple_displays
+  - display.set_scale
+  - display.open_color_profile
+  - display.open_hdr_settings
+  - display.open_night_light
+  - runner.is_elevated
+  - runner.relaunch_elevated
+  - bluetooth.get_state
+  - bluetooth.toggle
+  - bluetooth.list_paired
+  - bluetooth.connect_paired
+  - audio.get_state   
+  - audio.set_volume    
+  - audio.set_mute
+  - power.get_state
+  - power.list_schemes
+  - power.set_scheme
+  - power.get_mode
+  - power.set_mode
+  - power.srum_report
+  - bluetooth.scan_nearby
+  - gaming.get_game_mode
+  - gaming.set_game_mode
+
+
+
+  - time.get_state
+  - time.set_auto_time
+  - time.set_auto_timezone
+  - time.set_timezone
+  - time.sync_now
+  - time.set_show_systray_datetime
+  - time.set_show_clock_notification_center
+
+  - accessibility.get_vision_state
+  - accessibility.set_text_size
+  - accessibility.set_always_show_scrollbars
+  - accessibility.set_transparency_effects
+  - accessibility.set_animation_effects
+  - accessibility.set_dismiss_notifications_after
+
+  - accessibility.get_mouse_touch_state
+  - accessibility.set_mouse_pointer_style
+  - accessibility.set_mouse_pointer_size
+  - accessibility.set_mouse_indicator
+  - accessibility.set_pointer_trails
+  - accessibility.set_pointer_shadow
+  - accessibility.set_touch_indicator
+
+  - accessibility.get_mouse_touch_state
+  - accessibility.set_mouse_pointer_style
+  - accessibility.set_mouse_pointer_color
+  - accessibility.set_mouse_pointer_size
+  - accessibility.set_mouse_indicator
+  - accessibility.set_mouse_pointer_trails
+  - accessibility.set_mouse_pointer_trails_length
+  - accessibility.set_mouse_pointer_shadow
+  - accessibility.set_touch_indicator
+  - accessibility.set_touch_indicator_enhanced
+
+  - logs.list
+  - logs.tail
+  - logs.last
+  - logs.summarize_tail
+  - code.read_file
+  - code.search
+
+  - fs.list_dir
+  - fs.stat
+  - fs.mkdir
+  - fs.copy
+  - fs.move
+  - dev.status
+  - dev.sandbox_reset
+  - dev.propose_patch
+  - dev.discard_patch
+  - dev.apply_patch
+
+
+
+
+
+
+  - uia.get_status
+
+ui_automation:
+  enabled: false
+  allowlisted_apps:
+    - "Windows Settings"
+    - "Visual Studio Code"
+
+confirm:
+  # MEDIUM -> y/n, HIGH & CRITICAL -> type-to-confirm
+  y_n_for_risks: ["MEDIUM"]
+  type_to_confirm_for_risks: ["HIGH", "CRITICAL"]
+  type_phrase_high: "CONFIRM"
+  type_phrase_critical: "CONFIRM-CRITICAL"
+
+elevation_required_tools: []

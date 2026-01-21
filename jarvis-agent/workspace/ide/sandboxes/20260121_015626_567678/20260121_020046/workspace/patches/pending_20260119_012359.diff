@@ -1,0 +1,65 @@
+diff --git a/agent/core.py b/agent/core.py
+index abcdef1..abcdef2 100644
+--- a/agent/core.py
++++ b/agent/core.py
+@@ -11,7 +11,6 @@ from .tools import TOOLS
+from .safety import should_confirm, log_action, Tool
+from .models import load_model_roles
+
+-_policy = Policy.load()
+
+_roles = load_model_roles()
+_general_model, _coder_model, _research_model, _math_model = _roles[:4]
+_science_model = _roles[4] if len(_roles) > 4 else _general_model
+diff --git a/agent/devtools.py b/agent/devtools.py
+index abcdef3..abcdef4 100644
+--- a/agent/devtools.py
++++ b/agent/devtools.py
+@@ -16,7 +16,6 @@ from datetime import datetime
+import json
+import shutil
+import subprocess
+-import os
+import difflib
+
+def apply_patch(patch_content: str) -> None:
+    # Apply the patch to the repo
+    with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+        temp_file.write(patch_content.encode('utf-8'))
+        temp_file_path = temp_file.name
+    try:
+        subprocess.run(['git', 'apply', temp_file_path], check=True)
+    finally:
+        os.remove(temp_file_path)
+diff --git a/agent/tools.py b/agent/tools.py
+index abcdef5..abcdef6 100644
+--- a/agent/tools.py
++++ b/agent/tools.py
+@@ -1,7 +1,6 @@
+from __future__ import annotations
+from typing import Any, Dict, List, Optional, Tuple
+import json
+-import os
+import subprocess
+import time
+
+def _run_powershell(script: str) -> Tuple[int, str, str]:
+    p = subprocess.run(
+        ['powershell', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+        capture_output=True,
+        text=True,
+    )
+    return p.returncode, (p.stdout or '').strip(), (p.stderr or '').strip()
+diff --git a/config/policy.yaml b/config/policy.yaml
+index abcdef7..abcdef8 100644
+--- a/config/policy.yaml
++++ b/config/policy.yaml
+@@ -31,12 +31,6 @@ allowed_domains:
+  - system.get_info
+  - system.get_storage
+  - apps.list_installed
+-  - apps.open
+-  - apps.close
+-  - settings.open
+-  - network.get_state
+-  - network.toggle_wifi

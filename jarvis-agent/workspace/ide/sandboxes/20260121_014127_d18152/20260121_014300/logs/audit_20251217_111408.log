@@ -1,0 +1,7 @@
+# Jarvis audit session started 2025-12-17T11:14:08.065767
+2025-12-17T11:14:22.536041 | bluetooth.get_state | {} | success
+2025-12-17T11:14:58.911151 | bluetooth.toggle | {'enabled': True} | success
+2025-12-17T11:15:55.971454 | bluetooth.toggle | {'enabled': False} | success
+2025-12-17T11:21:16.554245 | runner.relaunch_elevated | {} | success
+2025-12-17T11:21:28.724244 | runner.is_elevated | {} | success
+2025-12-17T11:21:53.087074 | bluetooth.toggle | {'enabled': True} | error: HTTPConnectionPool(host='127.0.0.1', port=8765): Read timed out. (read timeout=15)

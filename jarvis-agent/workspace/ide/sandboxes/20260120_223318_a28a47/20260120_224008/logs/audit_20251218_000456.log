@@ -1,0 +1,4 @@
+# Jarvis audit session started 2025-12-18T00:04:56.566460
+2025-12-18T00:10:08.408531 | audio.get_state | {} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/audio.get_state
+2025-12-18T00:10:30.251509 | audio.get_state | {} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/audio.get_state
+2025-12-18T00:10:36.369569 | audio.set_volume | {'level': 20} | error: 404 Client Error: Not Found for url: http://127.0.0.1:8765/tool/audio.set_volume

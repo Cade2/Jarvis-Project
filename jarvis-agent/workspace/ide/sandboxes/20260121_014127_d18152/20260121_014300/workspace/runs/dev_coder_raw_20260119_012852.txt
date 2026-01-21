@@ -1,0 +1,4 @@
+{
+  "function_name": "_load_winrt_task_helpers",
+  "new_function_name": "_initialize_winrt_async_operations"
+}

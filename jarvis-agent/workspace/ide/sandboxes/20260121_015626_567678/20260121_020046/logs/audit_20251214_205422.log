@@ -1,0 +1,6 @@
+# Jarvis audit session started 2025-12-14T20:54:22.478786
+2025-12-14T20:55:44.085321 | bluetooth.get_state | {} | success
+2025-12-14T20:55:52.679381 | bluetooth.toggle | {'enabled': False} | success
+2025-12-14T20:55:59.332835 | bluetooth.toggle | {'enabled': True} | success
+2025-12-14T20:58:28.751225 | runner.is_elevated | {} | success
+2025-12-14T20:58:52.644960 | runner.relaunch_elevated | {} | success

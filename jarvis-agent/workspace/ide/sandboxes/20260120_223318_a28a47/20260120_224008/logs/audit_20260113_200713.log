@@ -1,0 +1,12 @@
+# Jarvis audit session started 2026-01-13T20:07:13.297475
+2026-01-13T20:07:26.530608 | fs.list_dir | {'path': '.'} | success
+2026-01-13T20:07:41.986914 | fs.mkdir | {'path': 'test-folder'} | success
+2026-01-13T20:07:45.905301 | fs.list_dir | {'path': '.'} | success
+2026-01-13T20:07:56.501080 | fs.list_dir | {'path': 'test-folder'} | success
+2026-01-13T20:08:03.929442 | fs.list_dir | {'path': 'test-folder'} | success
+2026-01-13T20:08:36.194618 | fs.copy | {'src': 'test-folder', 'dst': 'test-folder-copy'} | success
+2026-01-13T20:08:52.554990 | fs.copy | {'src': 'test-folder', 'dst': 'test-folder-copy'} | success
+2026-01-13T20:09:03.450256 | fs.move | {'src': 'test-folder-copy', 'dst': 'moved-folder'} | success
+2026-01-13T20:09:32.093058 | fs.move | {'src': 'test-folder-copy', 'dst': 'moved-folder'} | success
+2026-01-13T20:09:39.844400 | code.read_file | {'path': 'agent/core.py', 'max_lines': 120, 'start_line': 1} | success
+2026-01-13T20:09:53.355888 | code.search | {'query': 'fs.list_dir', 'path': 'agent/tools.py'} | success
